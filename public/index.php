@@ -21,7 +21,7 @@ $config = require dirname(__DIR__) . '/config/config.php';
 <span class="eyebrow">🎮 PLATEFORME D'APPRENTISSAGE GAMIFIÉE</span>
 <h1><span class="gradient-text">Joue. Apprends.</span><br>Progresse.</h1>
 <p>Transforme l'informatique en aventure. Réponds aux défis, protège tes 3 vies, progresse question après question et débloque les badges de chaque module.</p>
-<div class="hero-actions"><a class="btn btn-primary" href="login.php">🚀 Démarrer</a><a class="btn btn-secondary" href="dashboard.php">Voir la démo élève</a></div>
+<div class="hero-actions"><a class="btn btn-primary" href="login.php">🚀 Démarrer</a></div>
 <div class="stats-row"><div class="stat-mini"><strong>4</strong><span>modules de départ</span></div><div class="stat-mini"><strong>3 ❤️</strong><span>vies par tentative</span></div><div class="stat-mini"><strong>100%</strong><span>progression par défi</span></div></div>
 </section>
 <section class="hero-card"><img class="logo" src="assets/images/logo.png" alt="Logo Tech4U-QUEST"></section>
