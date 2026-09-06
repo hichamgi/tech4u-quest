@@ -3,6 +3,104 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Core\Auth;
+use App\Core\Database;
+use App\Core\Url;
+use App\Core\View;
+use App\Services\GameService;
+use PDO;
+use Throwable;
+
 final class StudentController
 {
+    public function dashboard(): void
+    {
+        $student = Auth::requireStudent(Url::to('login'));
+        $db = Database::connection();
+        $game = new GameService($db);
+        $modules = $game->modulesForStudent((int)$student['id']);
+
+        $badgeCountStmt = $db->prepare('SELECT COUNT(*) FROM student_badges WHERE student_id=:student');
+        $badgeCountStmt->execute(['student' => $student['id']]);
+        $badgeCount = (int)$badgeCountStmt->fetchColumn();
+
+        $badgesStmt = $db->prepare(
+            'SELECT b.icon,b.name,b.description,sb.obtained_at,m.title AS module_title
+             FROM student_badges sb
+             JOIN badges b ON b.id=sb.badge_id
+             JOIN modules m ON m.id=b.module_id
+             WHERE sb.student_id=:student
+             ORDER BY sb.obtained_at DESC'
+        );
+        $badgesStmt->execute(['student' => $student['id']]);
+        $badges = $badgesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        View::render('student/dashboard', [
+            'student' => $student,
+            'modules' => $modules,
+            'badgeCount' => $badgeCount,
+            'badges' => $badges,
+        ]);
+    }
+
+    public function module(string $id): void
+    {
+        $student = Auth::requireStudent(Url::to('login'));
+        $moduleId = max(1, (int)$id);
+        $game = new GameService(Database::connection());
+        $module = null;
+        $error = null;
+
+        try {
+            $module = $game->module($moduleId);
+        } catch (Throwable $e) {
+            $error = $e->getMessage();
+        }
+
+        View::render('student/module', [
+            'student' => $student,
+            'module' => $module,
+            'error' => $error,
+            'csrfToken' => Auth::csrfToken(),
+        ]);
+    }
+
+    public function startModule(string $id): void
+    {
+        $student = Auth::requireStudent(Url::to('login'));
+        $moduleId = max(1, (int)$id);
+
+        if (!Auth::validateCsrf(is_string($_POST['csrf_token'] ?? null) ? $_POST['csrf_token'] : null)) {
+            http_response_code(419);
+            View::render('student/module', [
+                'student' => $student,
+                'module' => null,
+                'error' => 'Jeton de sécurité invalide.',
+                'csrfToken' => Auth::csrfToken(),
+            ]);
+            return;
+        }
+
+        $game = new GameService(Database::connection());
+
+        try {
+            $game->module($moduleId);
+            $attemptId = $game->startOrResume((int)$student['id'], $moduleId);
+            header('Location: ' . Url::to('question/' . $attemptId));
+            exit;
+        } catch (Throwable $e) {
+            $module = null;
+            try {
+                $module = $game->module($moduleId);
+            } catch (Throwable) {
+            }
+
+            View::render('student/module', [
+                'student' => $student,
+                'module' => $module,
+                'error' => $e->getMessage(),
+                'csrfToken' => Auth::csrfToken(),
+            ]);
+        }
+    }
 }
