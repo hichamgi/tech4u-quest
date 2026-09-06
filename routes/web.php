@@ -12,6 +12,8 @@ $router->get('/', [HomeController::class, 'index']);
 
 $router->get('/login', [AuthController::class, 'login']);
 $router->post('/login', [AuthController::class, 'login']);
+$router->get('/change-password', [AuthController::class, 'changePassword']);
+$router->post('/change-password', [AuthController::class, 'changePassword']);
 $router->get('/logout', [AuthController::class, 'logout']);
 
 $router->get('/dashboard', [StudentController::class, 'dashboard']);
@@ -20,3 +22,5 @@ $router->post('/module/{id}/start', [StudentController::class, 'startModule']);
 
 $router->get('/question/{attempt}', [GameController::class, 'question']);
 $router->post('/question/{attempt}', [GameController::class, 'question']);
+$router->get('/attempt/{attempt}/game-over', [GameController::class, 'gameOver']);
+$router->get('/attempt/{attempt}/complete', [GameController::class, 'complete']);
