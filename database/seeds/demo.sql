@@ -1,0 +1,1 @@
+-- Données fictives uniquement. Ne jamais placer de vraies données élèves dans Git.

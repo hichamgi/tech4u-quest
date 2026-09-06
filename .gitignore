@@ -1,0 +1,31 @@
+# SQLite - données réelles / sensibles
+database/*.sqlite
+database/*.sqlite3
+database/*.db
+database/*.sqlite-wal
+database/*.sqlite-shm
+database/archives/*
+!database/archives/.gitkeep
+
+# Archives / logs / uploads
+storage/archives/*
+!storage/archives/.gitkeep
+storage/logs/*
+!storage/logs/.gitkeep
+storage/uploads/*
+!storage/uploads/.gitkeep
+
+# Configuration locale / secrets
+.env
+.env.*
+config/local.php
+config/database.local.php
+
+# Dépendances
+/vendor/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
