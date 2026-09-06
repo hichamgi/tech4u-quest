@@ -29,6 +29,54 @@ $importResult = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!Auth::validateCsrf($_POST['csrf_token'] ?? null)) {
         $error = 'Jeton de sécurité invalide. Recharge la page et recommence.';
+    } elseif (($_POST['action'] ?? '') === 'reset_demo') {
+        try {
+            $demoId = 999999;
+            $db->beginTransaction();
+
+            $exists = $db->prepare('SELECT id FROM students WHERE id = :id LIMIT 1');
+            $exists->execute(['id' => $demoId]);
+            if (!$exists->fetchColumn()) {
+                throw new RuntimeException('Le compte de démonstration n’existe pas encore. Exécute d’abord scripts/create-demo-student.php.');
+            }
+
+            $deleteBadges = $db->prepare('DELETE FROM student_badges WHERE student_id = :id');
+            $deleteBadges->execute(['id' => $demoId]);
+
+            // attempt_questions et attempt_answers sont supprimés par cascade avec les tentatives.
+            $deleteAttempts = $db->prepare('DELETE FROM attempts WHERE student_id = :id');
+            $deleteAttempts->execute(['id' => $demoId]);
+
+            $deleteHistory = $db->prepare('DELETE FROM student_login_history WHERE student_id = :id');
+            $deleteHistory->execute(['id' => $demoId]);
+
+            $resetAccount = $db->prepare(
+                'UPDATE students
+                 SET class_code = :class_code,
+                     student_number = :student_number,
+                     login_code = :login_code,
+                     password_hash = :password_hash,
+                     must_change_password = 0,
+                     active = 1,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = :id'
+            );
+            $resetAccount->execute([
+                'class_code' => 'DEMO',
+                'student_number' => 1,
+                'login_code' => 'demo-01',
+                'password_hash' => password_hash('000000', PASSWORD_DEFAULT),
+                'id' => $demoId,
+            ]);
+
+            $db->commit();
+            $message = 'Compte demo-01 réinitialisé : progression, tentatives et badges effacés. Mot de passe remis à 000000.';
+        } catch (Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            $error = $e->getMessage();
+        }
     } elseif (!isset($_FILES['csv']) || !is_array($_FILES['csv'])) {
         $error = 'Aucun fichier CSV reçu.';
     } elseif ((int)($_FILES['csv']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
@@ -67,6 +115,15 @@ $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $classes = $db->query('SELECT class_code, COUNT(*) AS total, SUM(active) AS active_total FROM students GROUP BY class_code ORDER BY class_code')->fetchAll(PDO::FETCH_ASSOC);
 $totals = $db->query('SELECT COUNT(*) AS total, COALESCE(SUM(active),0) AS active, COALESCE(SUM(must_change_password),0) AS must_change FROM students')->fetch(PDO::FETCH_ASSOC) ?: ['total'=>0,'active'=>0,'must_change'=>0];
 
+$demo = $db->prepare(
+    'SELECT s.id, s.login_code, s.active,
+            (SELECT COUNT(*) FROM attempts a WHERE a.student_id=s.id) AS attempts,
+            (SELECT COUNT(*) FROM student_badges sb WHERE sb.student_id=s.id) AS badges
+     FROM students s WHERE s.id=:id LIMIT 1'
+);
+$demo->execute(['id' => 999999]);
+$demoStudent = $demo->fetch(PDO::FETCH_ASSOC) ?: null;
+
 function e(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 'UTF-8'); }
 $activePage = 'students.php';
 ?><!doctype html>
@@ -97,6 +154,28 @@ $activePage = 'students.php';
 <div class="card kpi"><span>Actifs</span><strong><?= (int)$totals['active'] ?></strong></div>
 <div class="card kpi"><span>Classes</span><strong><?= count($classes) ?></strong></div>
 <div class="card kpi"><span>Mot de passe à changer</span><strong><?= (int)$totals['must_change'] ?></strong></div>
+</section>
+
+<section class="card" style="padding:1.25rem;margin-top:1rem;border-color:#8b5cf6">
+<div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;flex-wrap:wrap">
+<div>
+<span class="eyebrow">🧪 COMPTE DE PRÉSENTATION</span>
+<h2 style="margin:.4rem 0">Compte inspecteurs</h2>
+<?php if ($demoStudent): ?>
+<p style="margin:.3rem 0">Login : <code>demo-01</code> · Mot de passe : <code>000000</code></p>
+<p style="margin:.3rem 0;color:var(--muted)">Tentatives enregistrées : <?= (int)$demoStudent['attempts'] ?> · Badges : <?= (int)$demoStudent['badges'] ?></p>
+<?php else: ?>
+<p>Le compte demo-01 n’existe pas encore. Crée-le avec <code>php scripts/create-demo-student.php</code>.</p>
+<?php endif; ?>
+</div>
+<?php if ($demoStudent): ?>
+<form method="post" onsubmit="return confirm('Réinitialiser demo-01 ? Toutes ses tentatives, réponses, scores et badges seront supprimés.');">
+<input type="hidden" name="csrf_token" value="<?= e(Auth::csrfToken()) ?>">
+<input type="hidden" name="action" value="reset_demo">
+<button class="btn btn-danger" type="submit">↻ Réinitialiser demo-01</button>
+</form>
+<?php endif; ?>
+</div>
 </section>
 
 <section class="card" style="padding:1.25rem;margin-top:1rem">
