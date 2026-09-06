@@ -63,6 +63,8 @@ final class ArchiveService
         $token = bin2hex(random_bytes(6));
         $nextPath = dirname($this->databasePath) . '/.next-' . $token . '.sqlite';
         $oldPath = dirname($this->databasePath) . '/.old-' . $token . '.sqlite';
+        $archiveCreated = false;
+        $swapCompleted = false;
 
         try {
             $source = $this->open($this->databasePath);
@@ -71,6 +73,7 @@ final class ArchiveService
             // VACUUM INTO produit une copie SQLite cohérente, y compris lorsque WAL est actif.
             $source->exec('VACUUM INTO ' . $source->quote($archivePath));
             $source = null;
+            $archiveCreated = true;
 
             if (!is_file($archivePath) || filesize($archivePath) === 0) {
                 throw new RuntimeException('La création de l’archive SQLite a échoué.');
@@ -110,7 +113,7 @@ final class ArchiveService
             $next->commit();
             $next = null;
 
-            // Fermer/retirer les fichiers WAL résiduels de l’ancienne base avant l’échange.
+            // Retirer les fichiers WAL résiduels de l’ancienne base avant l’échange.
             @unlink($this->databasePath . '-wal');
             @unlink($this->databasePath . '-shm');
 
@@ -123,6 +126,7 @@ final class ArchiveService
                 throw new RuntimeException('Impossible d’installer la nouvelle base current.sqlite.');
             }
 
+            $swapCompleted = true;
             @unlink($oldPath);
 
             return [
@@ -132,9 +136,16 @@ final class ArchiveService
             ];
         } catch (Throwable $e) {
             @unlink($nextPath);
+
             if (is_file($oldPath) && !is_file($this->databasePath)) {
                 @rename($oldPath, $this->databasePath);
             }
+
+            // Une opération échouée ne doit pas bloquer une nouvelle tentative le même jour.
+            if ($archiveCreated && !$swapCompleted && is_file($this->databasePath)) {
+                @unlink($archivePath);
+            }
+
             throw $e;
         }
     }
