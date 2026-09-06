@@ -21,7 +21,24 @@ if ($attemptId < 1) {
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// Même avec un ancien lien direct vers question.php, un élève ne peut pas
+// continuer une tentative appartenant à un module désactivé par l'enseignant.
+$moduleAccessStmt = $db->prepare(
+    'SELECT m.active
+     FROM attempts a
+     JOIN modules m ON m.id = a.module_id
+     WHERE a.id = :attempt AND a.student_id = :student
+     LIMIT 1'
+);
+$moduleAccessStmt->execute(['attempt' => $attemptId, 'student' => (int)$student['id']]);
+$moduleActive = $moduleAccessStmt->fetchColumn();
+if ($moduleActive === false) {
+    $error = 'Tentative introuvable.';
+} elseif ((int)$moduleActive !== 1) {
+    $error = 'Ce module n’est pas encore disponible. Il sera activé après son traitement en classe.';
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === null) {
     if (!Auth::validateCsrf($_POST['csrf_token'] ?? null)) {
         $error = 'Jeton de sécurité invalide.';
     } else {
@@ -46,11 +63,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-try {
-    $data = $game->currentQuestion($attemptId, (int)$student['id']);
-} catch (Throwable $e) {
-    $error = $e->getMessage();
-    $data = null;
+$data = null;
+if ($error === null) {
+    try {
+        $data = $game->currentQuestion($attemptId, (int)$student['id']);
+    } catch (Throwable $e) {
+        $error = $e->getMessage();
+    }
 }
 
 function e(string $v): string { return htmlspecialchars($v, ENT_QUOTES, 'UTF-8'); }
