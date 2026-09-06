@@ -20,6 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $moduleId = filter_var($_POST['module_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
             $initialLives = filter_var($_POST['initial_lives'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 20]]);
             $badgeEnabled = isset($_POST['badge_enabled']) ? 1 : 0;
+            $moduleActive = isset($_POST['module_active']) ? 1 : 0;
 
             if ($moduleId === false || $initialLives === false) {
                 throw new RuntimeException('Paramètres du module invalides.');
@@ -59,8 +60,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $db->prepare('UPDATE module_settings SET question_count = :q, initial_lives = :l, badge_enabled = :b WHERE module_id = :m');
             $stmt->execute(['q' => $quotaSum, 'l' => $initialLives, 'b' => $badgeEnabled, 'm' => $moduleId]);
 
+            // Active/désactive le module côté élève sans supprimer sa configuration ni son historique.
+            $moduleStmt = $db->prepare('UPDATE modules SET active = :active WHERE id = :id');
+            $moduleStmt->execute(['active' => $moduleActive, 'id' => $moduleId]);
+
             $db->commit();
-            $message = "Configuration du module enregistrée. Questions par tentative : {$quotaSum}.";
+            $state = $moduleActive === 1 ? 'activé pour les élèves' : 'désactivé pour les élèves';
+            $message = "Configuration du module enregistrée. Questions par tentative : {$quotaSum}. Module {$state}.";
         } catch (Throwable $e) {
             if ($db->inTransaction()) {
                 $db->rollBack();
@@ -104,7 +110,7 @@ $activePage = 'modules.php';
 <body><div class="admin-shell">
 <?php require __DIR__.'/_sidebar.php'; ?>
 <main class="admin-main">
-<div class="page-head"><div><span class="eyebrow">🧭 CONFIGURATION PÉDAGOGIQUE</span><h1>Modules et réglages</h1><p>Contrôle du nombre de questions, des vies, des quotas par catégorie et de la couverture de la banque.</p></div><a class="btn btn-danger" href="../logout.php">Déconnexion</a></div>
+<div class="page-head"><div><span class="eyebrow">🧭 CONFIGURATION PÉDAGOGIQUE</span><h1>Modules et réglages</h1><p>Active uniquement les modules déjà traités en classe, puis règle les questions, les vies et les quotas par catégorie.</p></div><a class="btn btn-danger" href="../logout.php">Déconnexion</a></div>
 <?php if ($message): ?><div class="card" style="padding:1rem;margin-bottom:1rem;border-color:#2dd4bf"><strong><?= e($message) ?></strong></div><?php endif; ?>
 <?php if ($error): ?><div class="card" style="padding:1rem;margin-bottom:1rem;border-color:#fb7185"><strong><?= e($error) ?></strong></div><?php endif; ?>
 
@@ -114,16 +120,18 @@ $categories = $categoriesStmt->fetchAll(PDO::FETCH_ASSOC);
 $bankTarget = max(1, (int)$module['recommended_bank_size']);
 $bankPercent = min(100, (int)round(((int)$module['active_questions'] / $bankTarget) * 100));
 $currentQuotaTotal = array_sum(array_map(static fn(array $c): int => (int)$c['draw_count'], $categories));
+$isActive = (int)$module['active'] === 1;
 ?>
-<section class="card" style="padding:1.25rem;margin-bottom:1rem">
+<section class="card" style="padding:1.25rem;margin-bottom:1rem;<?= $isActive ? '' : 'opacity:.78;' ?>">
 <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:flex-start">
 <div><span class="eyebrow"><?= e((string)($module['icon'] ?: '📘')) ?> MODULE <?= (int)$module['id'] ?></span><h2 style="margin:.35rem 0"><?= e((string)$module['title']) ?></h2><p><?= e((string)($module['description'] ?? '')) ?></p></div>
-<div class="chip"><?= (int)$module['active_questions'] ?> / <?= (int)$module['recommended_bank_size'] ?> questions</div>
+<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap"><span class="chip" style="border-color:<?= $isActive ? '#2dd4bf' : '#fb7185' ?>"><?= $isActive ? '🟢 Visible aux élèves' : '🔴 Masqué aux élèves' ?></span><span class="chip"><?= (int)$module['active_questions'] ?> / <?= (int)$module['recommended_bank_size'] ?> questions</span></div>
 </div>
 <div class="progress" style="margin:.8rem 0 1.25rem"><span style="width:<?= $bankPercent ?>%"></span></div>
 <form method="post" class="module-config-form">
 <input type="hidden" name="csrf_token" value="<?= e(Auth::csrfToken()) ?>"><input type="hidden" name="module_id" value="<?= (int)$module['id'] ?>">
 <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:1rem">
+<div class="form-group"><label class="label">Disponibilité élèves</label><label style="display:flex;gap:.65rem;align-items:center;padding:.8rem 0"><input type="checkbox" name="module_active" value="1" <?= $isActive ? 'checked' : '' ?>> <strong>Module actif</strong></label><small style="color:var(--muted)">Décoche pour masquer ce module et empêcher les élèves d'y jouer.</small></div>
 <div class="form-group"><label class="label">Questions par tentative</label><input class="input question-total" type="number" value="<?= $currentQuotaTotal ?>" readonly aria-readonly="true"><small style="color:var(--muted)">Calculé automatiquement à partir de la somme des quotas.</small></div>
 <div class="form-group"><label class="label">Vies initiales</label><input class="input" type="number" min="1" max="20" name="initial_lives" value="<?= (int)$module['initial_lives'] ?>" required></div>
 <div class="form-group"><label class="label">Badge</label><label style="display:flex;gap:.5rem;align-items:center;padding:.8rem 0"><input type="checkbox" name="badge_enabled" value="1" <?= (int)$module['badge_enabled'] === 1 ? 'checked' : '' ?>> <?= e((string)(($module['badge_icon'] ?? '') . ' ' . ($module['badge_name'] ?? ''))) ?></label></div>
