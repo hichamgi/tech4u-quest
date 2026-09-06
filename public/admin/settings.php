@@ -36,6 +36,7 @@ function e(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 $nav = [
     ['🏠','Tableau de bord','index.php'],
     ['🧭','Modules et configuration','modules.php'],
+    ['❓','Questions','questions.php'],
     ['👥','Élèves','students.php'],
     ['⚙️','Paramètres','settings.php'],
 ];
