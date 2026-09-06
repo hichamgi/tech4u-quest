@@ -13,20 +13,15 @@ use App\Core\Url;
 /** @var Router $router */
 $router->get('/admin', [DashboardController::class, 'index']);
 $router->get('/admin/', [DashboardController::class, 'index']);
-
 $router->get('/admin/modules', [ModuleController::class, 'index']);
 $router->post('/admin/modules', [ModuleController::class, 'index']);
-
 $router->get('/admin/students', [StudentController::class, 'index']);
 $router->post('/admin/students', [StudentController::class, 'index']);
 $router->get('/admin/students/template', [StudentController::class, 'template']);
-
 $router->get('/admin/settings', [SettingsController::class, 'index']);
 $router->post('/admin/settings', [SettingsController::class, 'index']);
-
 $router->get('/admin/archive', [ArchiveController::class, 'index']);
 $router->post('/admin/archive', [ArchiveController::class, 'index']);
-
 $router->get('/admin/questions', [QuestionController::class, 'index']);
 $router->post('/admin/questions', [QuestionController::class, 'index']);
 $router->get('/admin/questions/new', [QuestionController::class, 'create']);
@@ -41,20 +36,15 @@ $router->get('/admin/questions/template', [QuestionController::class, 'template'
 $router->get('/admin/questions/export', [QuestionController::class, 'export']);
 $router->get('/admin/questions/reference', [QuestionController::class, 'reference']);
 
-// Compatibilité temporaire avec les anciennes URL .php.
-$redirects = [
-    '/admin/index.php' => 'admin',
-    '/admin/modules.php' => 'admin/modules',
-    '/admin/students.php' => 'admin/students',
-    '/admin/settings.php' => 'admin/settings',
-    '/admin/archive.php' => 'admin/archive',
-    '/admin/questions.php' => 'admin/questions',
-    '/admin/question-exclusions.php' => 'admin/questions/exclusions',
-    '/admin/questions-import.php' => 'admin/questions/import',
-];
-foreach ($redirects as $from => $to) {
-    $router->get($from, static function () use ($to): void {
-        header('Location: ' . Url::to($to), true, 301);
-        exit;
-    });
-}
+// Anciennes URL conservées comme redirections HTTP après suppression des anciens scripts.
+$router->get('/admin/index.php', static function ():void { header('Location: '.Url::to('admin'),true,301);exit; });
+$router->get('/admin/modules.php', static function ():void { header('Location: '.Url::to('admin/modules'),true,301);exit; });
+$router->get('/admin/students.php', static function ():void { $to=(($_GET['action']??'')==='template')?'admin/students/template':'admin/students';header('Location: '.Url::to($to),true,301);exit; });
+$router->get('/admin/settings.php', static function ():void { header('Location: '.Url::to('admin/settings'),true,301);exit; });
+$router->get('/admin/archive.php', static function ():void { header('Location: '.Url::to('admin/archive'),true,301);exit; });
+$router->get('/admin/questions.php', static function ():void { header('Location: '.Url::to('admin/questions'),true,301);exit; });
+$router->get('/admin/question-edit.php', static function ():void { $id=(int)($_GET['id']??0);header('Location: '.Url::to($id>0?'admin/questions/'.$id.'/edit':'admin/questions/new'),true,301);exit; });
+$router->get('/admin/question-exclusions.php', static function ():void { header('Location: '.Url::to('admin/questions/exclusions'),true,301);exit; });
+$router->get('/admin/questions-import.php', static function ():void { $to=isset($_GET['template'])?'admin/questions/template':'admin/questions/import';header('Location: '.Url::to($to),true,301);exit; });
+$router->get('/admin/questions-export.php', static function ():void { header('Location: '.Url::to('admin/questions/export'),true,301);exit; });
+$router->get('/admin/questions-reference.php', static function ():void { header('Location: '.Url::to('admin/questions/reference'),true,301);exit; });
