@@ -31,13 +31,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Jeton de sécurité invalide. Recharge la page et recommence.';
     } elseif (($_POST['action'] ?? '') === 'reset_demo') {
         try {
-            $demoId = 999999;
+            // Compte de présentation créé normalement par CSV : id=2, classe DEMO, numéro=1.
+            // La réinitialisation ne modifie ni son identité, ni son login, ni son mot de passe.
+            $demoId = 2;
             $db->beginTransaction();
 
-            $exists = $db->prepare('SELECT id FROM students WHERE id = :id LIMIT 1');
-            $exists->execute(['id' => $demoId]);
-            if (!$exists->fetchColumn()) {
-                throw new RuntimeException('Le compte de démonstration n’existe pas encore. Exécute d’abord scripts/create-demo-student.php.');
+            $exists = $db->prepare('SELECT id, login_code FROM students WHERE id = :id AND class_code = :class_code AND student_number = :student_number LIMIT 1');
+            $exists->execute(['id' => $demoId, 'class_code' => 'DEMO', 'student_number' => 1]);
+            $demoAccount = $exists->fetch(PDO::FETCH_ASSOC);
+            if (!$demoAccount) {
+                throw new RuntimeException('Le compte DEMO-1 (ID 2) n’existe pas. Importe-le d’abord avec le CSV élèves.');
             }
 
             $deleteBadges = $db->prepare('DELETE FROM student_badges WHERE student_id = :id');
@@ -47,30 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $deleteAttempts = $db->prepare('DELETE FROM attempts WHERE student_id = :id');
             $deleteAttempts->execute(['id' => $demoId]);
 
-            $deleteHistory = $db->prepare('DELETE FROM student_login_history WHERE student_id = :id');
-            $deleteHistory->execute(['id' => $demoId]);
-
-            $resetAccount = $db->prepare(
-                'UPDATE students
-                 SET class_code = :class_code,
-                     student_number = :student_number,
-                     login_code = :login_code,
-                     password_hash = :password_hash,
-                     must_change_password = 0,
-                     active = 1,
-                     updated_at = CURRENT_TIMESTAMP
-                 WHERE id = :id'
-            );
-            $resetAccount->execute([
-                'class_code' => 'DEMO',
-                'student_number' => 1,
-                'login_code' => 'demo-01',
-                'password_hash' => password_hash('000000', PASSWORD_DEFAULT),
-                'id' => $demoId,
-            ]);
-
             $db->commit();
-            $message = 'Compte demo-01 réinitialisé : progression, tentatives et badges effacés. Mot de passe remis à 000000.';
+            $message = 'Compte DEMO-1 réinitialisé : progression, tentatives, réponses, scores et badges effacés. Le compte et son mot de passe sont inchangés.';
         } catch (Throwable $e) {
             if ($db->inTransaction()) {
                 $db->rollBack();
@@ -119,9 +100,11 @@ $demo = $db->prepare(
     'SELECT s.id, s.login_code, s.active,
             (SELECT COUNT(*) FROM attempts a WHERE a.student_id=s.id) AS attempts,
             (SELECT COUNT(*) FROM student_badges sb WHERE sb.student_id=s.id) AS badges
-     FROM students s WHERE s.id=:id LIMIT 1'
+     FROM students s
+     WHERE s.id=:id AND s.class_code=:class_code AND s.student_number=:student_number
+     LIMIT 1'
 );
-$demo->execute(['id' => 999999]);
+$demo->execute(['id' => 2, 'class_code' => 'DEMO', 'student_number' => 1]);
 $demoStudent = $demo->fetch(PDO::FETCH_ASSOC) ?: null;
 
 function e(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 'UTF-8'); }
@@ -162,17 +145,18 @@ $activePage = 'students.php';
 <span class="eyebrow">🧪 COMPTE DE PRÉSENTATION</span>
 <h2 style="margin:.4rem 0">Compte inspecteurs</h2>
 <?php if ($demoStudent): ?>
-<p style="margin:.3rem 0">Login : <code>demo-01</code> · Mot de passe : <code>000000</code></p>
+<p style="margin:.3rem 0">Login : <code><?= e((string)$demoStudent['login_code']) ?></code> · compte ID <code>2</code></p>
 <p style="margin:.3rem 0;color:var(--muted)">Tentatives enregistrées : <?= (int)$demoStudent['attempts'] ?> · Badges : <?= (int)$demoStudent['badges'] ?></p>
+<p style="margin:.3rem 0;color:var(--muted)">La réinitialisation efface uniquement la progression. Elle ne modifie pas le compte ni son mot de passe.</p>
 <?php else: ?>
-<p>Le compte demo-01 n’existe pas encore. Crée-le avec <code>php scripts/create-demo-student.php</code>.</p>
+<p>Le compte DEMO-1 (ID 2, classe DEMO, numéro 1) n’existe pas encore dans cette base.</p>
 <?php endif; ?>
 </div>
 <?php if ($demoStudent): ?>
-<form method="post" onsubmit="return confirm('Réinitialiser demo-01 ? Toutes ses tentatives, réponses, scores et badges seront supprimés.');">
+<form method="post" onsubmit="return confirm('Réinitialiser DEMO-1 ? Toutes ses tentatives, réponses, scores et badges seront supprimés. Le compte et son mot de passe resteront inchangés.');">
 <input type="hidden" name="csrf_token" value="<?= e(Auth::csrfToken()) ?>">
 <input type="hidden" name="action" value="reset_demo">
-<button class="btn btn-danger" type="submit">↻ Réinitialiser demo-01</button>
+<button class="btn btn-danger" type="submit">↻ Réinitialiser DEMO-1</button>
 </form>
 <?php endif; ?>
 </div>
