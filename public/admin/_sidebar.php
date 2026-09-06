@@ -6,6 +6,7 @@ $adminNav = [
     ['🏠', 'Tableau de bord', 'index.php'],
     ['🧭', 'Modules et configuration', 'modules.php'],
     ['❓', 'Questions', 'questions.php'],
+    ['🔀', 'Exclusions de questions', 'question-exclusions.php'],
     ['👥', 'Élèves', 'students.php'],
     ['⚙️', 'Paramètres', 'settings.php'],
 ];
