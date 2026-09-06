@@ -5,7 +5,7 @@
 > **Joue. Apprends. Progresse.**  
 > Chaque question est un défi. Chaque module est une victoire.
 
-L'application propose un parcours par modules avec questions aléatoires, vies, progression, scores, Game Over et badges. Elle comprend également une interface d'administration pour gérer les modules, catégories, questions, groupes d'exclusion et élèves.
+L'application propose un parcours par modules avec questions aléatoires, vies, progression, scores, Game Over et badges. Elle comprend également une interface d'administration pour gérer les modules, catégories, questions, groupes d'exclusion, élèves et archivage annuel.
 
 ---
 
@@ -42,6 +42,8 @@ L'application propose un parcours par modules avec questions aléatoires, vies, 
 - Import des élèves par CSV.
 - Conservation d'un identifiant numérique stable pour chaque élève.
 - Réinitialisation des résultats du compte de démonstration sans supprimer son compte.
+- Archivage annuel de la base SQLite depuis l'administration.
+- Création automatique d'une nouvelle `current.sqlite` sans recopier les élèves ni leurs données.
 
 ---
 
@@ -128,16 +130,19 @@ tech4u-quest/
 │   │   ├── Auth.php
 │   │   └── Database.php
 │   └── Services/
+│       ├── ArchiveService.php
 │       ├── GameService.php
 │       ├── QuestionBankService.php
 │       └── StudentCsvImportService.php
 ├── config/
 ├── database/
+│   ├── archives/           # archives SQLite non versionnées
 │   ├── schema.sql
 │   ├── seeds/
-│   └── current.sqlite       # non versionné
+│   └── current.sqlite      # non versionné
 ├── public/
 │   ├── admin/
+│   │   └── archive.php
 │   ├── assets/
 │   ├── dashboard.php
 │   ├── module.php
@@ -145,6 +150,7 @@ tech4u-quest/
 │   ├── game-over.php
 │   └── module-complete.php
 ├── scripts/
+├── LICENSE
 └── README.md
 ```
 
@@ -243,7 +249,7 @@ Lors d'une mise à jour, un mot de passe vide permet de conserver le hash déjà
 
 ## 🔐 Sécurité et Git
 
-Le `.gitignore` doit exclure notamment :
+Le `.gitignore` exclut notamment :
 
 - les bases SQLite réelles ;
 - les fichiers WAL/SHM SQLite ;
@@ -283,7 +289,7 @@ php -m | grep -i sqlite
 
 Le résultat doit notamment contenir `pdo_sqlite`.
 
-Le serveur web doit avoir les droits d'écriture sur le dossier `database/`, car SQLite doit pouvoir créer la base ainsi que les fichiers WAL et SHM.
+Le serveur web doit avoir les droits d'écriture sur le dossier `database/`, car SQLite doit pouvoir créer la base ainsi que les fichiers WAL, SHM et les archives.
 
 Exemple sous Debian avec Apache :
 
@@ -339,8 +345,10 @@ Après une modification importante, il est conseillé de vérifier la syntaxe PH
 
 ```bash
 php -l app/Core/Database.php
+php -l app/Services/ArchiveService.php
 php -l app/Services/GameService.php
 php -l app/Services/QuestionBankService.php
+php -l public/admin/archive.php
 ```
 
 ---
@@ -355,17 +363,57 @@ Les identifiants et mots de passe réels de production ne doivent pas être docu
 
 ## 🗃️ Archivage annuel
 
-Le principe prévu est d'utiliser une base SQLite active par année scolaire et d'archiver l'ancienne base avant de commencer la suivante.
-
-Exemple :
+L'archivage est disponible depuis l'administration :
 
 ```text
-database/current.sqlite
-archives/2026-2027.sqlite
-archives/2027-2028.sqlite
+/admin/archive.php
 ```
 
-Les archives contenant des données réelles ne doivent pas être ajoutées au dépôt Git.
+Un clic sur **Archiver et préparer la nouvelle année** effectue les opérations suivantes :
+
+1. création d'une copie complète et cohérente de `current.sqlite` ;
+2. enregistrement de cette copie dans :
+
+```text
+database/archives/AAAA-MM-JJ.sqlite
+```
+
+3. préparation d'une nouvelle `database/current.sqlite` ;
+4. conservation de toutes les tables et données communes à l'application ;
+5. suppression uniquement des élèves et des données qui leur appartiennent.
+
+L'archive reste complète : elle conserve donc les élèves de l'année terminée, leurs tentatives, réponses, scores et badges obtenus.
+
+La nouvelle `current.sqlite` conserve notamment :
+
+```text
+settings
+users
+modules
+categories
+questions
+question_answers
+module_settings
+module_category_settings
+badges
+```
+
+Elle ne recopie pas :
+
+```text
+students
+student_login_history
+attempts
+attempt_questions
+attempt_answers
+student_badges
+```
+
+Cela permet de conserver la configuration pédagogique et les comptes administratifs tout en repartant avec une base sans élèves pour la nouvelle année.
+
+Une archive portant le même nom de date n'est jamais écrasée automatiquement.
+
+Les archives contiennent des données réelles et sont exclues du dépôt Git.
 
 ---
 
@@ -379,4 +427,13 @@ Lors d'une évolution du schéma, privilégier une migration de la base existant
 
 ## 📄 Licence
 
-Aucune licence n'est actuellement spécifiée dans le dépôt. L'ajout d'un fichier `LICENSE` est recommandé avant toute redistribution publique du projet.
+**Tech4U-QUEST est un logiciel propriétaire.**
+
+Copyright © 2026 **Hicham ARID**  
+Contact : **hichamgi@gmail.com**
+
+Aucune utilisation, installation, copie, modification, redistribution, intégration ou exploitation du logiciel n'est autorisée sans l'accord écrit préalable de Hicham ARID.
+
+La présence publique du code source ne constitue pas une autorisation d'utilisation.
+
+Les conditions complètes figurent dans le fichier [`LICENSE`](LICENSE).
