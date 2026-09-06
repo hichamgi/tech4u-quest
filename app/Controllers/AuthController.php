@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Auth;
+use App\Core\Url;
 use App\Core\View;
 
 final class AuthController
@@ -43,23 +44,27 @@ final class AuthController
     public function logout(): void
     {
         Auth::logout();
-        header('Location: ./');
+        header('Location: ' . Url::to());
         exit;
     }
 
     private function redirectAfterLogin(): never
     {
         if (Auth::isAdmin()) {
-            header('Location: admin/');
+            header('Location: ' . Url::to('admin/'));
             exit;
         }
 
         if (Auth::isStudent()) {
-            header('Location: ' . (Auth::studentNeedsPasswordChange() ? 'change-password.php' : 'dashboard.php'));
+            header('Location: ' . (
+                Auth::studentNeedsPasswordChange()
+                    ? Url::to('change-password.php')
+                    : Url::to('dashboard')
+            ));
             exit;
         }
 
-        header('Location: ./');
+        header('Location: ' . Url::to());
         exit;
     }
 }
