@@ -10,6 +10,7 @@ final class StudentCsvImportService
 {
     private const MAX_FILE_SIZE = 2_000_000;
     private const CSV_ESCAPE = '\\';
+    private const IMPORT_MAX_EXECUTION_SECONDS = 300;
 
     public function __construct(private PDO $db)
     {
@@ -32,6 +33,12 @@ final class StudentCsvImportService
      */
     public function import(string $path, int $size): array
     {
+        // password_hash() is intentionally CPU intensive. A few hundred new
+        // students can legitimately exceed PHP's usual 30-second web limit.
+        // Keep the secure default password algorithm and allow enough time for
+        // a complete school-list import instead of weakening password hashes.
+        @set_time_limit(self::IMPORT_MAX_EXECUTION_SECONDS);
+
         if ($size < 1 || $size > self::MAX_FILE_SIZE) {
             throw new RuntimeException('Le fichier CSV est vide ou dépasse 2 Mo.');
         }
