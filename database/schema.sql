@@ -15,8 +15,9 @@ CREATE TABLE users (
 );
 
 CREATE TABLE students (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    student_uid TEXT NOT NULL UNIQUE,
+    -- Stable identifier imported from the local MySQL database.
+    -- Tech4U-QUEST must never generate this value itself.
+    id INTEGER PRIMARY KEY,
     class_code TEXT NOT NULL,
     student_number INTEGER NOT NULL CHECK(student_number > 0),
     login_code TEXT NOT NULL UNIQUE,
