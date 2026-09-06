@@ -112,6 +112,17 @@ final class Auth
         return $user !== null && ($user['type'] ?? null) === 'student';
     }
 
+    public static function studentNeedsPasswordChange(): bool
+    {
+        $user = self::user();
+        if (!$user || ($user['type'] ?? null) !== 'student') {
+            return false;
+        }
+
+        return strtoupper((string)($user['class_code'] ?? '')) !== 'DEMO'
+            && !empty($user['must_change_password']);
+    }
+
     public static function requireAdmin(string $loginPath = '../login.php'): array
     {
         $user = self::user();
@@ -122,14 +133,31 @@ final class Auth
         return $user;
     }
 
-    public static function requireStudent(string $loginPath = 'login.php'): array
-    {
+    public static function requireStudent(
+        string $loginPath = 'login.php',
+        string $passwordChangePath = 'change-password.php',
+        bool $allowPendingPasswordChange = false
+    ): array {
         $user = self::user();
         if (!$user || ($user['type'] ?? null) !== 'student') {
             header('Location: ' . $loginPath);
             exit;
         }
+
+        if (!$allowPendingPasswordChange && self::studentNeedsPasswordChange()) {
+            header('Location: ' . $passwordChangePath);
+            exit;
+        }
+
         return $user;
+    }
+
+    public static function markStudentPasswordChanged(): void
+    {
+        self::boot();
+        if (isset($_SESSION[self::SESSION_KEY]) && is_array($_SESSION[self::SESSION_KEY])) {
+            $_SESSION[self::SESSION_KEY]['must_change_password'] = false;
+        }
     }
 
     public static function logout(): void
