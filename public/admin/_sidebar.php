@@ -12,6 +12,18 @@ $adminNav = [
 
 $esc = static fn(string $value): string => htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
 ?>
+<script>
+(() => {
+    let favicon = document.querySelector('link[rel="icon"]');
+    if (!favicon) {
+        favicon = document.createElement('link');
+        favicon.rel = 'icon';
+        document.head.appendChild(favicon);
+    }
+    favicon.type = 'image/png';
+    favicon.href = '../assets/images/icon.png';
+})();
+</script>
 <aside class="sidebar">
     <a class="brand" href="../">
         <span class="brand-mark">⚡</span>
