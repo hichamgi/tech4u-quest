@@ -8,7 +8,7 @@ $config = require dirname(__DIR__) . '/config/config.php';
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#07101f">
 <title><?= htmlspecialchars($config['app_name']) ?> — Apprendre en jouant</title>
-<link rel="icon" type="image/png" href="assets/images/logo.png">
+<link rel="icon" type="image/png" href="assets/images/icon.png">
 <link rel="stylesheet" href="assets/css/app.css">
 </head>
 <body>
