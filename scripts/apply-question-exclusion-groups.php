@@ -4,8 +4,6 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/app/Core/Database.php';
 
 use App\Core\Database;
-use PDO;
-use RuntimeException;
 
 /**
  * Apply the pedagogical exclusion groups identified during the question-bank audit.
