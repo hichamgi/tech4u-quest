@@ -1,0 +1,129 @@
+category_id;question;type;difficulty;lesson;topic;explanation;answer_1;correct_1;answer_2;correct_2;answer_3;correct_3;answer_4;correct_4;answer_5;correct_5;answer_6;correct_6;active
+302;"En ASCII sur 8 bits, quel texte correspond à : 01001000 01101001 ?";qcm;3;Données et types;Binaire vers texte;"01001000 = 72 = H et 01101001 = 105 = i.";Hi;1;HI;0;ih;0;81;0;;;;;1
+302;"Quel codage binaire ASCII sur 8 bits représente le texte OK ?";qcm;3;Données et types;Texte vers binaire;"O = 79 = 01001111 et K = 75 = 01001011.";"01001111 01001011";1;"01001011 01001111";0;"01001110 01001011";0;"01001111 01001010";0;;;;;1
+302;"En ASCII sur 8 bits, quel caractère correspond à 01000001 ?";qcm;3;Données et types;Binaire vers texte;"01000001 vaut 65 en décimal, code ASCII de A.";A;1;a;0;B;0;1;0;;;;;1
+302;"Quel octet ASCII représente le caractère a ?";qcm;3;Données et types;Texte vers binaire;"Le code ASCII décimal de a est 97, soit 01100001 en binaire.";01100001;1;01000001;0;01100010;0;00110001;0;;;;;1
+304;"Quelle est la valeur finale de x ?
+1. x = 5
+2. y = 2
+3. x = x + y * 3
+4. x = x - 1";qcm;3;Opérateurs et expressions;Priorités;"La multiplication est prioritaire : 2×3=6, puis x=11, puis x=10.";10;1;14;0;20;0;8;0;;;;;1
+304;"Quelle expression Python teste correctement si x est compris entre 10 et 20 inclus ?";qcm;3;Opérateurs et expressions;Conditions;"Python permet l'écriture chaînée 10 <= x <= 20.";"10 <= x <= 20";1;"10 < x > 20";0;"x = 10 and 20";0;"10 <= x or x <= 20";0;;;;;1
+306;"Quelle ligne provoque une erreur dans ce programme Python ?
+1. a = 4
+2. b = 3
+3. c = a + b
+4. print(c
+5. print('fin')";qcm;3;Séquence et blocs;Débogage;"La parenthèse fermante manque à la ligne 4.";Ligne 1;0;Ligne 2;0;Ligne 4;1;Ligne 5;0;;;;;1
+306;"Quelle ligne contient l'erreur ?
+1. nom = input('Nom : ')
+2. age = int(input('Age : '))
+3. annee = 2026 - age
+4. print('Année de naissance : ' + annee)";qcm;4;Séquence et blocs;Types;"On ne peut pas concaténer directement une chaîne et un entier. Il faut convertir annee en str ou utiliser plusieurs arguments de print.";Ligne 1;0;Ligne 2;0;Ligne 3;0;Ligne 4;1;;;;;1
+307;"Quel affichage produit ce programme ?
+1. note = 12
+2. if note >= 10:
+3.     print('Admis')
+4. else:
+5.     print('Ajourné')";qcm;3;Structures conditionnelles;Trace;"12 est supérieur ou égal à 10, donc la branche if est exécutée.";Admis;1;Ajourné;0;12;0;Aucun affichage;0;;;;;1
+307;"Quelle ligne contient une erreur de syntaxe Python ?
+1. x = 7
+2. if x > 5
+3.     print('grand')
+4. else:
+5.     print('petit')";qcm;3;Structures conditionnelles;Débogage;"Il manque le deux-points à la fin de la condition de la ligne 2.";Ligne 1;0;Ligne 2;1;Ligne 3;0;Ligne 4;0;;;;;1
+307;"Quelle ligne logique est incorrecte si l'on veut afficher 'Valide' seulement lorsque age est entre 18 et 60 inclus ?
+1. age = 17
+2. if age >= 18 or age <= 60:
+3.     print('Valide')
+4. else:
+5.     print('Non valide')";qcm;4;Structures conditionnelles;Logique booléenne;"Il faut utiliser and, pas or, pour imposer les deux bornes simultanément.";Ligne 1;0;Ligne 2;1;Ligne 3;0;Ligne 5;0;;;;;1
+307;"Que faut-il remplacer à la ligne 2 ?
+1. x = 15
+2. if x > 10 and x < 20:
+3.     print('dans intervalle')";qcm;3;Structures conditionnelles;Équivalence;"La condition peut être écrite plus simplement sous forme chaînée.";"if 10 < x < 20:";1;"if x < 10 < 20:";0;"if 10 > x > 20:";0;"if x == 10 and 20:";0;;;;;1
+308;"Quelle ligne Pascal contient une erreur ?
+1. var x: integer;
+2. begin
+3.   x := 5;
+4.   Writeln(x)
+5. end.";qcm;3;Pascal;Débogage;"Le programme est syntaxiquement correct : le point-virgule avant end n'est pas obligatoire après la dernière instruction.";Aucune ligne;1;Ligne 1;0;Ligne 3;0;Ligne 4;0;;;;;1
+308;"Quelle ligne Pascal contient l'erreur ?
+1. var age: integer;
+2. begin
+3.   Readln(age);
+4.   if age >= 18 then
+5.      Writeln('Majeur')
+6.   else
+7.      Writeln('Mineur');
+8. end.";qcm;4;Pascal;Condition;"En Pascal, un point-virgule placé juste avant else provoquerait une erreur, mais ici il n'y en a pas : ce code est correct.";Aucune ligne;1;Ligne 4;0;Ligne 5;0;Ligne 6;0;;;;;1
+308;"Quelle instruction affecte correctement la valeur 10 à x en Pascal ?";qcm;2;Pascal;Affectation;"Pascal utilise := pour l'affectation.";"x := 10;";1;"x = 10;";0;"x == 10;";0;"10 := x;";0;;;;;1
+309;"Quelle ligne contient l'erreur ?
+1. x = 8
+2. y = 3
+3. resultat = x / y
+4. print(Resultat)";qcm;3;Python - fondamentaux;Sensibilité à la casse;"Python distingue resultat de Resultat.";Ligne 1;0;Ligne 2;0;Ligne 3;0;Ligne 4;1;;;;;1
+309;"Quel type Python a la valeur obtenue par 7 / 2 ?";qcm;3;Python - fondamentaux;Types;"L'opérateur / produit un float en Python, ici 3.5.";float;1;int;0;str;0;bool;0;;;;;1
+309;"Quel affichage produit ce code ?
+1. a = 3
+2. b = a
+3. a = 8
+4. print(b)";qcm;3;Python - fondamentaux;Variables;"b reçoit la valeur 3 à la ligne 2. Modifier ensuite a ne modifie pas b.";3;1;8;0;11;0;Erreur;0;;;;;1
+310;"Quel est le résultat de l'expression Python 2 + 3 * 4 ** 2 ?";qcm;4;Python - expressions;Priorités;"Puissance d'abord : 4²=16, puis 3×16=48, puis +2 = 50.";50;1;80;0;196;0;26;0;;;;;1
+310;"Quelle expression renvoie True ?";qcm;4;Python - expressions;Booléens;"5 < 8 est vrai et 8 != 10 est vrai.";"5 < 8 and 8 != 10";1;"5 > 8 or 8 == 10";0;"not (5 < 8)";0;"5 == 8";0;;;;;1
+310;"Quel est le résultat de 17 // 5 et 17 % 5 ?";qcm;3;Python - expressions;Division entière et modulo;"17 = 3×5 + 2.";"3 et 2";1;"3.4 et 0";0;"2 et 3";0;"5 et 2";0;;;;;1
+311;"Quelle ligne contient l'erreur ?
+1. age = input('Age : ')
+2. age = int(age)
+3. prochain = age + 1
+4. print('Age prochain : ' + prochain)";qcm;3;Python - entrées et sorties;Conversion;"prochain est un entier et ne peut pas être concaténé directement à une chaîne avec +.";Ligne 1;0;Ligne 2;0;Ligne 3;0;Ligne 4;1;;;;;1
+311;"Que va afficher ce programme si l'utilisateur saisit 4 ?
+1. x = int(input('x = '))
+2. print(x * 2 + 1)";qcm;3;Python - entrées et sorties;Trace;"4×2+1 = 9.";9;1;8;0;41;0;5;0;;;;;1
+311;"Quel appel affiche exactement A-B-C sur une seule ligne ?";qcm;3;Python - entrées et sorties;print sep;"Le paramètre sep définit le séparateur entre les arguments.";"print('A','B','C', sep='-')";1;"print('A-B-C', sep=' ')";0;"print('A','B','C', end='-')";0;"print('A';'B';'C')";0;;;;;1
+312;"Quelle ligne contient l'erreur ?
+1. note = 14
+2. if note >= 16:
+3.     mention = 'Très bien'
+4. elif note >= 12
+5.     mention = 'Bien'
+6. else:
+7.     mention = 'Passable'";qcm;3;Python - conditions;Débogage;"Il manque le deux-points à la fin de la ligne 4.";Ligne 2;0;Ligne 3;0;Ligne 4;1;Ligne 6;0;;;;;1
+312;"Quel résultat produit ce code ?
+1. x = 6
+2. if x % 2 == 0:
+3.     if x > 5:
+4.         print('A')
+5.     else:
+6.         print('B')
+7. else:
+8.     print('C')";qcm;4;Python - conditions;Conditions imbriquées;"6 est pair et supérieur à 5, donc A est affiché.";A;1;B;0;C;0;A puis C;0;;;;;1
+312;"Quelle condition teste qu'une année est divisible par 4 mais pas par 100 ?";qcm;4;Python - conditions;Logique;"Les deux conditions doivent être vraies simultanément.";"annee % 4 == 0 and annee % 100 != 0";1;"annee % 4 == 0 or annee % 100 != 0";0;"annee / 4 == 0 and annee / 100 != 0";0;"annee % 4 != 0 and annee % 100 == 0";0;;;;;1
+312;"Quelle ligne doit être corrigée ?
+1. temperature = 30
+2. if temperature > 25:
+3.     print('Chaud')
+4. elif temperature > 35:
+5.     print('Très chaud')
+6. else:
+7.     print('Normal')";qcm;5;Python - conditions;Ordre des conditions;"La condition >35 ne sera jamais atteinte car >25 est testée avant. Il faut tester >35 d'abord.";Ligne 2;1;Ligne 3;0;Ligne 4;0;Ligne 6;0;;;;;1
+312;"Quel affichage produit ce programme ?
+1. x = 10
+2. if x > 5:
+3.     print('A')
+4. if x > 8:
+5.     print('B')
+6. else:
+7.     print('C')";qcm;4;Python - conditions;Deux if indépendants;"Les deux if sont indépendants. x>5 affiche A puis x>8 affiche B.";"A puis B";1;"A seulement";0;"B seulement";0;"A puis C";0;;;;;1
+302;"Convertis le texte CAT en ASCII binaire 8 bits.";qcm;5;Données et types;Texte vers binaire;"C=67=01000011, A=65=01000001, T=84=01010100.";"01000011 01000001 01010100";1;"01000001 01000011 01010100";0;"01000011 01000001 01010101";0;"01000011 01000010 01010100";0;;;;;1
+302;"Quel texte ASCII correspond à 01010000 01011001 01010100 01001000 01001111 01001110 ?";qcm;5;Données et types;Binaire vers texte;"Les octets correspondent successivement aux lettres P Y T H O N.";PYTHON;1;PITHON;0;PYTH0N;0;THONPY;0;;;;;1
+310;"Quelle valeur finale est affichée ?
+1. x = 4
+2. y = 2
+3. z = x ** y
+4. z = z // 3
+5. print(z)";qcm;4;Python - expressions;Trace;"4²=16 puis 16//3=5.";5;1;4;0;5.33;0;16;0;;;;;1
+311;"Quelle correction rend ce code valide ?
+1. n = input('Nombre : ')
+2. resultat = n + 5
+3. print(resultat)";qcm;4;Python - entrées et sorties;Conversion;"input renvoie une chaîne. Il faut convertir n en entier avant l'addition.";"Remplacer la ligne 1 par n = int(input('Nombre : '))";1;"Remplacer la ligne 2 par resultat = n * 5";0;"Remplacer la ligne 3 par print('resultat')";0;"Aucune correction";0;;;;;1
