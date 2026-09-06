@@ -6,9 +6,13 @@ require_once dirname(__DIR__,2).'/app/Services/QuestionBankService.php';
 use App\Core\Auth; use App\Core\Database; use App\Services\QuestionBankService;
 Auth::requireAdmin('../login.php'); $db=Database::connection(); $svc=new QuestionBankService($db); Auth::boot();
 function e(string $v): string{return htmlspecialchars($v,ENT_QUOTES,'UTF-8');}
+function normalizeCsvHeader(string $v): string {
+    $v = preg_replace('/^\xEF\xBB\xBF/', '', trim($v)) ?? trim($v);
+    return strtolower($v);
+}
 $errors=[];$preview=$_SESSION['question_import_preview']??null;$message=null;
 if(isset($_GET['template'])){
- header('Content-Type:text/csv; charset=UTF-8');header('Content-Disposition:attachment; filename="questions-template.csv"');echo "\xEF\xBB\xBF";echo "category_id;question;type;difficulty;lesson;topic;explanation;answer_1;correct_1;answer_2;correct_2;answer_3;correct_3;answer_4;correct_4;answer_5;correct_5;answer_6;correct_6;active\n";echo "1;Qu est-ce que l informatique ?;qcm;1;Leçon 1;Vocabulaire;Explication;Traitement automatique de l information;1;Réseaux uniquement;0;Matériel uniquement;0;Images uniquement;0;;;;;1\n";exit;
+ header('Content-Type:text/csv; charset=UTF-8');header('Content-Disposition:attachment; filename="questions-template.csv"');echo "\xEF\xBB\xBF";echo "category_id;question;type;difficulty;lesson;topic;explanation;answer_1;correct_1;answer_2;correct_2;answer_3;correct_3;answer_4;correct_4;answer_5;correct_5;answer_6;correct_6;active\n";echo "101;Qu est-ce que l informatique ?;qcm;1;Leçon 1;Vocabulaire;Explication;Traitement automatique de l information;1;Réseaux uniquement;0;Matériel uniquement;0;Images uniquement;0;;;;;1\n";exit;
 }
 if($_SERVER['REQUEST_METHOD']==='POST'){
  if(!Auth::validateCsrf($_POST['csrf_token']??null))$errors[]='Jeton de sécurité invalide.';
@@ -21,7 +25,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
   else {
    $h=fopen($_FILES['csv']['tmp_name'],'rb'); if(!$h)$errors[]='Impossible d’ouvrir le CSV.'; else {
     $first=fgets($h);$delim=(substr_count((string)$first,';')>=substr_count((string)$first,','))?';':',';rewind($h);
-    $header=fgetcsv($h,0,$delim,'"','\\');$header=array_map(fn($v)=>strtolower(trim((string)$v)),(array)$header);
+    $header=fgetcsv($h,0,$delim,'"','\\');$header=array_map(fn($v)=>normalizeCsvHeader((string)$v),(array)$header);
     $required=['category_id','question','type','difficulty'];foreach($required as $r)if(!in_array($r,$header,true))$errors[]='Colonne obligatoire absente : '.$r;
     $valid=[];$rowErrors=[];$line=1;
     if(!$errors) while(($row=fgetcsv($h,0,$delim,'"','\\'))!==false){$line++;if(count(array_filter($row,fn($x)=>trim((string)$x)!==''))===0)continue;$row=array_pad($row,count($header),'');$d=array_combine($header,array_slice($row,0,count($header)));if(!$d){$rowErrors[]="Ligne $line : structure invalide.";continue;}
