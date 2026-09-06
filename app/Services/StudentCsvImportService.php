@@ -9,14 +9,23 @@ use RuntimeException;
 final class StudentCsvImportService
 {
     private const MAX_FILE_SIZE = 2_000_000;
+    private const CSV_ESCAPE = '\\';
 
     public function __construct(private PDO $db)
     {
     }
 
     /**
-     * Expected columns:
-     * id,class_code,student_number,password,active,must_change_password
+     * Formats accepted:
+     *
+     * With header:
+     * id;class_code;student_number;password;active;must_change_password
+     *
+     * Without header (5 columns):
+     * id;class_code;student_number;password;active
+     *
+     * Without header (6 columns):
+     * id;class_code;student_number;password;active;must_change_password
      *
      * Semicolon, comma and tab delimiters are accepted.
      * Existing students are synchronized by their stable MySQL numeric ID.
@@ -40,14 +49,37 @@ final class StudentCsvImportService
             if ($firstLine === false) {
                 throw new RuntimeException('Le fichier CSV est vide.');
             }
+
             $delimiter = $this->detectDelimiter($firstLine);
             rewind($handle);
 
-            $header = fgetcsv($handle, 0, $delimiter);
-            if ($header === false) {
-                throw new RuntimeException('En-tête CSV invalide.');
+            $firstRow = fgetcsv($handle, 0, $delimiter, '"', self::CSV_ESCAPE);
+            if ($firstRow === false || $this->isEmptyRow($firstRow)) {
+                throw new RuntimeException('Première ligne CSV invalide.');
             }
-            $header = array_map([$this, 'normalizeHeader'], $header);
+
+            $normalizedFirstRow = array_map([$this, 'normalizeHeader'], $firstRow);
+            $hasHeader = in_array('id', $normalizedFirstRow, true)
+                && in_array('class_code', $normalizedFirstRow, true)
+                && in_array('student_number', $normalizedFirstRow, true);
+
+            if ($hasHeader) {
+                $header = $normalizedFirstRow;
+                $firstDataRow = null;
+            } else {
+                $columnCount = count($firstRow);
+                if ($columnCount === 5) {
+                    $header = ['id', 'class_code', 'student_number', 'password', 'active'];
+                } elseif ($columnCount === 6) {
+                    $header = ['id', 'class_code', 'student_number', 'password', 'active', 'must_change_password'];
+                } else {
+                    throw new RuntimeException(
+                        'CSV sans en-tête : 5 ou 6 colonnes sont attendues. ' .
+                        'Format : id;class_code;student_number;password;active[;must_change_password]'
+                    );
+                }
+                $firstDataRow = $firstRow;
+            }
 
             $required = ['id', 'class_code', 'student_number'];
             foreach ($required as $column) {
@@ -64,27 +96,19 @@ final class StudentCsvImportService
                 'rows' => 0,
             ];
 
-            $lineNumber = 1;
-            while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
+            $lineNumber = $hasHeader ? 1 : 0;
+
+            if ($firstDataRow !== null) {
+                $lineNumber = 1;
+                $this->processRow($firstDataRow, $header, $lineNumber, $result);
+            }
+
+            while (($row = fgetcsv($handle, 0, $delimiter, '"', self::CSV_ESCAPE)) !== false) {
                 $lineNumber++;
                 if ($this->isEmptyRow($row)) {
                     continue;
                 }
-                $result['rows']++;
-
-                $row = array_pad($row, count($header), '');
-                $data = array_combine($header, array_slice($row, 0, count($header)));
-                if (!is_array($data)) {
-                    $result['errors'][] = "Ligne {$lineNumber} : structure CSV invalide.";
-                    continue;
-                }
-
-                try {
-                    $status = $this->syncStudent($data);
-                    $result[$status]++;
-                } catch (\Throwable $e) {
-                    $result['errors'][] = "Ligne {$lineNumber} : " . $e->getMessage();
-                }
+                $this->processRow($row, $header, $lineNumber, $result);
             }
 
             return $result;
@@ -93,12 +117,36 @@ final class StudentCsvImportService
         }
     }
 
+    private function processRow(array $row, array $header, int $lineNumber, array &$result): void
+    {
+        $result['rows']++;
+
+        if (count($row) > count($header)) {
+            $result['errors'][] = "Ligne {$lineNumber} : trop de colonnes.";
+            return;
+        }
+
+        $row = array_pad($row, count($header), '');
+        $data = array_combine($header, array_slice($row, 0, count($header)));
+        if (!is_array($data)) {
+            $result['errors'][] = "Ligne {$lineNumber} : structure CSV invalide.";
+            return;
+        }
+
+        try {
+            $status = $this->syncStudent($data);
+            $result[$status]++;
+        } catch (\Throwable $e) {
+            $result['errors'][] = "Ligne {$lineNumber} : " . $e->getMessage();
+        }
+    }
+
     private function syncStudent(array $data): string
     {
         $id = filter_var(trim((string)($data['id'] ?? '')), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
         $number = filter_var(trim((string)($data['student_number'] ?? '')), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
         $classCode = strtoupper(trim((string)($data['class_code'] ?? '')));
-        $password = (string)($data['password'] ?? '');
+        $password = trim((string)($data['password'] ?? ''));
         $active = $this->boolValue($data['active'] ?? '1', true);
         $mustChange = $this->boolValue($data['must_change_password'] ?? '1', true);
 
