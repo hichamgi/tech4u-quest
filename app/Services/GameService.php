@@ -32,14 +32,55 @@ final class GameService
 
     private function createAttempt(int $studentId,int $moduleId,?array $previous): int
     {
-        $module=$this->module($moduleId);$questionCount=(int)$module['question_count'];$initialLives=(int)$module['initial_lives'];$attemptNumber=$previous?((int)$previous['attempt_number']+1):1;$path=$this->buildFreshPath($moduleId);
+        $module=$this->module($moduleId);$questionCount=(int)$module['question_count'];$initialLives=(int)$module['initial_lives'];$attemptNumber=$previous?((int)$previous['attempt_number']+1):1;
+
         if($previous&&(string)$previous['status']==='game_over'){
-            $oldStmt=$this->db->prepare('SELECT aq.position,aq.question_id,c.id AS category_id FROM attempt_questions aq JOIN questions q ON q.id=aq.question_id JOIN categories c ON c.id=q.category_id WHERE aq.attempt_id=:attempt ORDER BY aq.position');$oldStmt->execute(['attempt'=>$previous['id']]);$oldPath=$oldStmt->fetchAll(PDO::FETCH_ASSOC);$encountered=min((int)$previous['current_position'],$questionCount);
-            foreach($oldPath as $old){$pos=(int)$old['position'];if($pos>$encountered)$path[$pos]=(int)$old['question_id'];else $path[$pos]=$this->randomQuestionForCategory((int)$old['category_id'],[(int)$old['question_id']]);}ksort($path);
-            $path=$this->enforceExclusionGroups($path);
+            $path=$this->buildRetryPath($moduleId,$previous,$questionCount);
+        }else{
+            $path=$this->buildFreshPath($moduleId);
         }
+
         if(count($path)!==$questionCount)throw new RuntimeException('La banque de questions ne permet pas de construire le parcours configuré. Vérifie les quotas par catégorie et les groupes d’exclusion.');
         $this->db->beginTransaction();try{$insert=$this->db->prepare('INSERT INTO attempts(student_id,module_id,attempt_number,total_questions,current_position,lives,score,status) VALUES(:student,:module,:attempt_number,:total,1,:lives,0,"in_progress")');$insert->execute(['student'=>$studentId,'module'=>$moduleId,'attempt_number'=>$attemptNumber,'total'=>$questionCount,'lives'=>$initialLives]);$attemptId=(int)$this->db->lastInsertId();$iq=$this->db->prepare('INSERT INTO attempt_questions(attempt_id,position,question_id) VALUES(:attempt,:position,:question)');foreach($path as $position=>$questionId)$iq->execute(['attempt'=>$attemptId,'position'=>$position,'question'=>$questionId]);$this->db->commit();return $attemptId;}catch(\Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
+    }
+
+    private function buildRetryPath(int $moduleId,array $previous,int $questionCount): array
+    {
+        $oldStmt=$this->db->prepare('SELECT aq.position,aq.question_id,q.category_id,q.exclusion_group FROM attempt_questions aq JOIN questions q ON q.id=aq.question_id WHERE aq.attempt_id=:attempt ORDER BY aq.position');
+        $oldStmt->execute(['attempt'=>$previous['id']]);
+        $oldPath=$oldStmt->fetchAll(PDO::FETCH_ASSOC);
+        if(count($oldPath)!==$questionCount)return $this->buildFreshPath($moduleId);
+
+        $encountered=min((int)$previous['current_position'],$questionCount);
+        $path=[];$usedIds=[];$usedGroups=[];
+
+        // Les positions jamais vues restent identiques. Leurs groupes sont réservés uniquement
+        // pour CETTE nouvelle tentative, pas pour les tentatives suivantes.
+        foreach($oldPath as $old){
+            $pos=(int)$old['position'];
+            if($pos<=$encountered)continue;
+            $qid=(int)$old['question_id'];
+            $path[$pos]=$qid;$usedIds[]=$qid;
+            $g=trim((string)($old['exclusion_group']??''));if($g!=='')$usedGroups[$g]=true;
+        }
+
+        // Pour les positions déjà rencontrées, éviter en priorité la même question.
+        // Le groupe utilisé lors de la tentative précédente n'est PAS interdit : seul le groupe
+        // déjà présent dans la nouvelle tentative est pris en compte.
+        foreach($oldPath as $old){
+            $pos=(int)$old['position'];if($pos>$encountered)continue;
+            $oldId=(int)$old['question_id'];$categoryId=(int)$old['category_id'];
+            $qid=$this->randomQuestionForCategory($categoryId,array_values(array_unique(array_merge($usedIds,[$oldId]))),array_keys($usedGroups),false);
+            if($qid===null){
+                // Aucune autre question compatible : autoriser l'ancienne question en dernier recours.
+                $qid=$this->randomQuestionForCategory($categoryId,$usedIds,array_keys($usedGroups),true);
+            }
+            $path[$pos]=$qid;$usedIds[]=$qid;
+            $meta=$this->questionMeta($qid);$g=trim((string)($meta['exclusion_group']??''));if($g!=='')$usedGroups[$g]=true;
+        }
+
+        ksort($path);
+        return $path;
     }
 
     private function buildFreshPath(int $moduleId): array
@@ -54,24 +95,19 @@ final class GameService
         shuffle($questionIds);$path=[];foreach($questionIds as $i=>$qid)$path[$i+1]=$qid;return $path;
     }
 
-    private function enforceExclusionGroups(array $path): array
-    {
-        $used=[];$seenIds=[];
-        foreach($path as $pos=>$qid){$meta=$this->questionMeta((int)$qid);$g=trim((string)($meta['exclusion_group']??''));if($g!==''&&isset($used[$g])){$replacement=$this->randomQuestionForCategory((int)$meta['category_id'],$seenIds,array_keys($used));$path[$pos]=$replacement;$meta=$this->questionMeta($replacement);$g=trim((string)($meta['exclusion_group']??''));}if($g!=='')$used[$g]=true;$seenIds[]=(int)$path[$pos];}
-        return $path;
-    }
-
     private function questionMeta(int $questionId): array
     {
         $s=$this->db->prepare('SELECT id,category_id,exclusion_group FROM questions WHERE id=:id');$s->execute(['id'=>$questionId]);$r=$s->fetch(PDO::FETCH_ASSOC);if(!$r)throw new RuntimeException('Question introuvable.');return $r;
     }
 
-    private function randomQuestionForCategory(int $categoryId,array $exclude=[],array $excludedGroups=[]): int
+    private function randomQuestionForCategory(int $categoryId,array $exclude=[],array $excludedGroups=[],bool $required=true): ?int
     {
         $sql='SELECT id FROM questions WHERE category_id=:category AND active=1';$params=['category'=>$categoryId];
-        if($exclude){$marks=[];foreach($exclude as $i=>$id){$key='x'.$i;$marks[]=':'.$key;$params[$key]=$id;}$sql.=' AND id NOT IN ('.implode(',',$marks).')';}
-        if($excludedGroups){$marks=[];foreach($excludedGroups as $i=>$g){$key='g'.$i;$marks[]=':'.$key;$params[$key]=$g;}$sql.=' AND (exclusion_group IS NULL OR trim(exclusion_group)="" OR exclusion_group NOT IN ('.implode(',',$marks).'))';}
-        $sql.=' ORDER BY RANDOM() LIMIT 1';$stmt=$this->db->prepare($sql);$stmt->execute($params);$id=$stmt->fetchColumn();if($id===false&&$exclude)return $this->randomQuestionForCategory($categoryId,[],$excludedGroups);if($id===false)throw new RuntimeException("Aucune question compatible disponible dans la catégorie {$categoryId}.");return(int)$id;
+        if($exclude){$marks=[];foreach(array_values(array_unique($exclude)) as $i=>$id){$key='x'.$i;$marks[]=':'.$key;$params[$key]=$id;}$sql.=' AND id NOT IN ('.implode(',',$marks).')';}
+        if($excludedGroups){$marks=[];foreach(array_values(array_unique($excludedGroups)) as $i=>$g){$key='g'.$i;$marks[]=':'.$key;$params[$key]=$g;}$sql.=' AND (exclusion_group IS NULL OR trim(exclusion_group)="" OR exclusion_group NOT IN ('.implode(',',$marks).'))';}
+        $sql.=' ORDER BY RANDOM() LIMIT 1';$stmt=$this->db->prepare($sql);$stmt->execute($params);$id=$stmt->fetchColumn();
+        if($id===false){if(!$required)return null;throw new RuntimeException("Aucune question compatible disponible dans la catégorie {$categoryId}.");}
+        return(int)$id;
     }
 
     public function attempt(int $attemptId,int $studentId): array
