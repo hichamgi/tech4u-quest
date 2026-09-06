@@ -54,7 +54,7 @@ try {
 }
 
 function e(string $v): string { return htmlspecialchars($v, ENT_QUOTES, 'UTF-8'); }
-?><!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Défi — Tech4U-QUEST</title><link rel="stylesheet" href="assets/css/app.css"></head><body>
+?><!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Défi — Tech4U-QUEST</title><link rel="icon" type="image/png" href="assets/images/icon.png"><link rel="stylesheet" href="assets/css/app.css"></head><body>
 <header class="site-header"><div class="container nav"><a class="brand" href="dashboard.php"><span class="brand-mark">⚡</span><span>Tech4U <b>QUEST</b></span></a><?php if ($data): ?><div class="lives" aria-label="<?= (int)$data['attempt']['lives'] ?> vies"><?= str_repeat('♥ ', (int)$data['attempt']['lives']) ?></div><?php endif; ?></div></header>
 <main class="container page">
 <?php if ($error): ?><div class="card card-pad" style="border-color:#fb7185"><strong><?= e($error) ?></strong><div style="margin-top:1rem"><a class="btn btn-secondary" href="dashboard.php">Retour au tableau de bord</a></div></div><?php elseif ($data):
