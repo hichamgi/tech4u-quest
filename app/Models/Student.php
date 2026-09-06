@@ -22,6 +22,45 @@ final class Student
         return $classCode . '-' . $studentNumber;
     }
 
+    /**
+     * Create or synchronize a Tech4U student from the local MySQL database.
+     * The numeric ID is provided by MySQL and must remain stable.
+     */
+    public function createFromLocalId(
+        int $studentId,
+        string $classCode,
+        int $studentNumber,
+        string $plainPassword,
+        bool $mustChange = true
+    ): void {
+        if ($studentId < 1) {
+            throw new RuntimeException('ID élève invalide.');
+        }
+        if (mb_strlen($plainPassword) < 6) {
+            throw new RuntimeException('Le mot de passe doit contenir au moins 6 caractères.');
+        }
+
+        $loginCode = self::buildLoginCode($classCode, $studentNumber);
+
+        $stmt = $this->db->prepare(
+            'INSERT INTO students(
+                id, class_code, student_number, login_code,
+                password_hash, must_change_password
+             ) VALUES (
+                :id, :class_code, :student_number, :login_code,
+                :password_hash, :must_change_password
+             )'
+        );
+        $stmt->execute([
+            'id' => $studentId,
+            'class_code' => strtoupper(trim($classCode)),
+            'student_number' => $studentNumber,
+            'login_code' => $loginCode,
+            'password_hash' => password_hash($plainPassword, PASSWORD_DEFAULT),
+            'must_change_password' => $mustChange ? 1 : 0,
+        ]);
+    }
+
     public function changeNumber(int $studentId, int $newNumber): void
     {
         if ($newNumber < 1) {
