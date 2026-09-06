@@ -7,7 +7,7 @@ use RuntimeException;
 
 final class View
 {
-    public static function render(string $view, array $data = []): void
+    public static function render(string $view, array $variables = []): void
     {
         $view = trim($view, '/');
         $file = dirname(__DIR__, 2) . '/views/' . $view . '.php';
@@ -16,7 +16,7 @@ final class View
             throw new RuntimeException('Vue introuvable : ' . $view);
         }
 
-        extract($data, EXTR_SKIP);
+        extract($variables, EXTR_SKIP);
         require $file;
     }
 }
