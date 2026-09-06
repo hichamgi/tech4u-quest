@@ -1,0 +1,12 @@
+<?php
+declare(strict_types=1);
+use App\Core\Auth;
+function e_admin_archive(string $v):string{return htmlspecialchars($v,ENT_QUOTES,'UTF-8');}
+function fmt_admin_bytes(int $b):string{if($b>=1073741824)return number_format($b/1073741824,2,',',' ').' Go';if($b>=1048576)return number_format($b/1048576,2,',',' ').' Mo';if($b>=1024)return number_format($b/1024,2,',',' ').' Ko';return $b.' o';}
+$title='Archivage — Tech4U-QUEST';$activePage='archive';require __DIR__.'/_header.php';
+?>
+<div class="page-head"><div><span class="eyebrow">🗄️ ARCHIVAGE</span><h1>Archivage annuel</h1><p>Conserver l’année actuelle puis préparer une base propre pour les nouveaux élèves.</p></div></div>
+<?php if($message):?><div class="card" style="padding:1rem;margin-bottom:1rem;border-color:#2dd4bf"><strong><?=e_admin_archive($message)?></strong></div><?php endif;?><?php if($error):?><div class="card" style="padding:1rem;margin-bottom:1rem;border-color:#fb7185"><strong><?=e_admin_archive($error)?></strong></div><?php endif;?>
+<section class="card" style="padding:1.25rem;margin-bottom:1.25rem;max-width:900px"><h2>Créer l’archive de l’année</h2><p>L’action crée une copie complète dans <code>database/archives/<?=e_admin_archive(date('Y-m-d'))?>.sqlite</code>.</p><p>L’archive conserve les élèves, tentatives, réponses, scores et badges. La nouvelle base conserve les paramètres, utilisateurs admin, modules, catégories, questions, réponses, quotas et badges, sans les données élèves.</p><form method="post" onsubmit="return confirm('Confirmer l’archivage ? La base actuelle sera archivée puis les élèves et leurs données seront retirés de la nouvelle current.sqlite.');"><input type="hidden" name="csrf_token" value="<?=e_admin_archive(Auth::csrfToken())?>"><button class="btn btn-danger" name="action" value="archive">🗄️ Archiver et préparer la nouvelle année</button></form></section>
+<section class="card" style="padding:1.25rem;max-width:900px"><h2>Archives disponibles</h2><?php if(!$archives):?><p>Aucune archive SQLite pour le moment.</p><?php else:?><div style="overflow:auto"><table class="table"><thead><tr><th>Archive</th><th>Taille</th><th>Date</th></tr></thead><tbody><?php foreach($archives as $a):?><tr><td><code><?=e_admin_archive((string)$a['name'])?></code></td><td><?=e_admin_archive(fmt_admin_bytes((int)$a['size']))?></td><td><?=e_admin_archive(date('d/m/Y H:i',(int)$a['modified']))?></td></tr><?php endforeach;?></tbody></table></div><?php endif;?></section>
+<?php require __DIR__.'/_footer.php';?>
