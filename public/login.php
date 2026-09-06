@@ -14,7 +14,7 @@ if (Auth::check()) {
         exit;
     }
     if (Auth::isStudent()) {
-        header('Location: dashboard.php');
+        header('Location: ' . (Auth::studentNeedsPasswordChange() ? 'change-password.php' : 'dashboard.php'));
         exit;
     }
 }
@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: admin/');
             exit;
         }
-        header('Location: dashboard.php');
+        header('Location: ' . (Auth::studentNeedsPasswordChange() ? 'change-password.php' : 'dashboard.php'));
         exit;
     } else {
         $error = 'Identifiant ou mot de passe incorrect.';
@@ -49,7 +49,7 @@ $csrfToken = Auth::csrfToken();
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="theme-color" content="#07101f">
     <title>Connexion — Tech4U-QUEST</title>
-    <link rel="icon" href="assets/images/icon.png">
+    <link rel="icon" type="image/png" href="assets/images/icon.png">
     <link rel="stylesheet" href="assets/css/app.css">
 </head>
 <body>
