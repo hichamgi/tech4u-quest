@@ -16,12 +16,25 @@ CREATE TABLE users (
 
 CREATE TABLE students (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    code TEXT NOT NULL UNIQUE,
-    first_name TEXT NOT NULL,
-    last_name TEXT NOT NULL,
-    class_name TEXT,
-    active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    student_uid TEXT NOT NULL UNIQUE,
+    class_code TEXT NOT NULL,
+    student_number INTEGER NOT NULL CHECK(student_number > 0),
+    login_code TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    must_change_password INTEGER NOT NULL DEFAULT 1 CHECK(must_change_password IN (0,1)),
+    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT,
+    UNIQUE(class_code, student_number)
+);
+
+CREATE TABLE student_login_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER NOT NULL,
+    old_login_code TEXT NOT NULL,
+    new_login_code TEXT NOT NULL,
+    changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(student_id) REFERENCES students(id) ON DELETE CASCADE
 );
 
 CREATE TABLE modules (
@@ -143,6 +156,9 @@ CREATE TABLE student_badges (
     UNIQUE(student_id, badge_id)
 );
 
+CREATE INDEX idx_students_class ON students(class_code);
+CREATE INDEX idx_students_login ON students(login_code);
+CREATE INDEX idx_login_history_student ON student_login_history(student_id);
 CREATE INDEX idx_categories_module ON categories(module_id);
 CREATE INDEX idx_questions_category ON questions(category_id);
 CREATE INDEX idx_answers_question ON question_answers(question_id);
