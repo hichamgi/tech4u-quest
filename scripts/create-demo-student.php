@@ -10,7 +10,7 @@ $db = Database::connection();
 $id = 999999;
 $classCode = 'DEMO';
 $studentNumber = 1;
-$loginCode = 'DEMO-01';
+$loginCode = 'demo-01';
 $password = '000000';
 
 $stmt = $db->prepare(
