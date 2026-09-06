@@ -82,11 +82,43 @@ final class Router
 
     private function stripBasePath(string $path): string
     {
-        $scriptName = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
-        $basePath = rtrim(dirname($scriptName), '/.');
+        $candidates = [];
 
-        if ($basePath !== '' && $basePath !== '/' && str_starts_with($path, $basePath)) {
-            $path = substr($path, strlen($basePath));
+        // Apache Alias / ScriptAlias expose souvent CONTEXT_PREFIX.
+        $contextPrefix = trim((string)($_SERVER['CONTEXT_PREFIX'] ?? ''));
+        if ($contextPrefix !== '') {
+            $candidates[] = '/' . trim($contextPrefix, '/');
+        }
+
+        // Cas classique : /tech4u-quest/index.php -> /tech4u-quest
+        foreach (['SCRIPT_NAME', 'PHP_SELF'] as $key) {
+            $scriptName = str_replace('\\', '/', (string)($_SERVER[$key] ?? ''));
+            if ($scriptName === '') {
+                continue;
+            }
+
+            $basePath = rtrim(dirname($scriptName), '/.');
+            if ($basePath !== '' && $basePath !== '/') {
+                $candidates[] = $basePath;
+            }
+        }
+
+        // Déploiement actuel sous l'Alias Apache /tech4u-quest/.
+        // Ce fallback reste sans effet lorsque l'application est servie à la racine du domaine.
+        $candidates[] = '/tech4u-quest';
+
+        $candidates = array_values(array_unique($candidates));
+        usort($candidates, static fn(string $a, string $b): int => strlen($b) <=> strlen($a));
+
+        foreach ($candidates as $basePath) {
+            if ($path === $basePath) {
+                return '/';
+            }
+
+            if (str_starts_with($path, $basePath . '/')) {
+                $stripped = substr($path, strlen($basePath));
+                return $stripped === '' ? '/' : $stripped;
+            }
         }
 
         return $path === '' ? '/' : $path;
