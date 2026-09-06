@@ -20,7 +20,7 @@ function e(string $value): string
 <body>
 <header class="site-header"><div class="container nav">
 <a class="brand" href="<?= e(Url::to()) ?>"><span class="brand-mark">⚡</span><span>Tech4U <b>QUEST</b></span></a>
-<nav class="nav-links"><a class="nav-link active" href="<?= e(Url::to()) ?>">Accueil</a><a class="nav-link" href="<?= e(Url::to('login')) ?>">Connexion</a><a class="btn btn-primary" href="<?= e(Url::to('login')) ?>">Commencer la quête →</a></nav>
+<nav class="nav-links"><a class="nav-link active" href="<?= e(Url::to()) ?>">Accueil</a></nav>
 </div></header>
 <main class="container hero">
 <section>
