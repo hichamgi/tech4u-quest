@@ -18,11 +18,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         try {
             $moduleId = filter_var($_POST['module_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-            $questionCount = filter_var($_POST['question_count'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 100]]);
             $initialLives = filter_var($_POST['initial_lives'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 20]]);
             $badgeEnabled = isset($_POST['badge_enabled']) ? 1 : 0;
 
-            if ($moduleId === false || $questionCount === false || $initialLives === false) {
+            if ($moduleId === false || $initialLives === false) {
                 throw new RuntimeException('Paramètres du module invalides.');
             }
 
@@ -32,8 +31,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $db->beginTransaction();
-            $stmt = $db->prepare('UPDATE module_settings SET question_count = :q, initial_lives = :l, badge_enabled = :b WHERE module_id = :m');
-            $stmt->execute(['q' => $questionCount, 'l' => $initialLives, 'b' => $badgeEnabled, 'm' => $moduleId]);
 
             $quotaSum = 0;
             foreach ($categoryCounts as $categoryId => $count) {
@@ -42,22 +39,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($categoryId === false || $count === false) {
                     throw new RuntimeException('Quota de catégorie invalide.');
                 }
+
                 $belongs = $db->prepare('SELECT 1 FROM categories WHERE id = :c AND module_id = :m');
                 $belongs->execute(['c' => $categoryId, 'm' => $moduleId]);
                 if (!$belongs->fetchColumn()) {
                     throw new RuntimeException('Une catégorie ne correspond pas au module sélectionné.');
                 }
+
                 $up = $db->prepare('INSERT INTO module_category_settings(module_id, category_id, question_count) VALUES(:m,:c,:q) ON CONFLICT(module_id, category_id) DO UPDATE SET question_count = excluded.question_count');
                 $up->execute(['m' => $moduleId, 'c' => $categoryId, 'q' => $count]);
                 $quotaSum += $count;
             }
 
-            if ($quotaSum !== $questionCount) {
-                throw new RuntimeException("La somme des quotas ({$quotaSum}) doit être égale au nombre de questions du module ({$questionCount}).");
+            if ($quotaSum < 1 || $quotaSum > 100) {
+                throw new RuntimeException('La somme des quotas doit être comprise entre 1 et 100 questions.');
             }
 
+            // Le nombre de questions par tentative est toujours dérivé de la somme des quotas.
+            $stmt = $db->prepare('UPDATE module_settings SET question_count = :q, initial_lives = :l, badge_enabled = :b WHERE module_id = :m');
+            $stmt->execute(['q' => $quotaSum, 'l' => $initialLives, 'b' => $badgeEnabled, 'm' => $moduleId]);
+
             $db->commit();
-            $message = 'Configuration du module enregistrée.';
+            $message = "Configuration du module enregistrée. Questions par tentative : {$quotaSum}.";
         } catch (Throwable $e) {
             if ($db->inTransaction()) {
                 $db->rollBack();
@@ -110,6 +113,7 @@ $categoriesStmt->execute(['module_id' => $module['id']]);
 $categories = $categoriesStmt->fetchAll(PDO::FETCH_ASSOC);
 $bankTarget = max(1, (int)$module['recommended_bank_size']);
 $bankPercent = min(100, (int)round(((int)$module['active_questions'] / $bankTarget) * 100));
+$currentQuotaTotal = array_sum(array_map(static fn(array $c): int => (int)$c['draw_count'], $categories));
 ?>
 <section class="card" style="padding:1.25rem;margin-bottom:1rem">
 <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:flex-start">
@@ -117,20 +121,40 @@ $bankPercent = min(100, (int)round(((int)$module['active_questions'] / $bankTarg
 <div class="chip"><?= (int)$module['active_questions'] ?> / <?= (int)$module['recommended_bank_size'] ?> questions</div>
 </div>
 <div class="progress" style="margin:.8rem 0 1.25rem"><span style="width:<?= $bankPercent ?>%"></span></div>
-<form method="post">
+<form method="post" class="module-config-form">
 <input type="hidden" name="csrf_token" value="<?= e(Auth::csrfToken()) ?>"><input type="hidden" name="module_id" value="<?= (int)$module['id'] ?>">
 <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:1rem">
-<div class="form-group"><label class="label">Questions par tentative</label><input class="input" type="number" min="1" max="100" name="question_count" value="<?= (int)$module['question_count'] ?>" required></div>
+<div class="form-group"><label class="label">Questions par tentative</label><input class="input question-total" type="number" value="<?= $currentQuotaTotal ?>" readonly aria-readonly="true"><small style="color:var(--muted)">Calculé automatiquement à partir de la somme des quotas.</small></div>
 <div class="form-group"><label class="label">Vies initiales</label><input class="input" type="number" min="1" max="20" name="initial_lives" value="<?= (int)$module['initial_lives'] ?>" required></div>
 <div class="form-group"><label class="label">Badge</label><label style="display:flex;gap:.5rem;align-items:center;padding:.8rem 0"><input type="checkbox" name="badge_enabled" value="1" <?= (int)$module['badge_enabled'] === 1 ? 'checked' : '' ?>> <?= e((string)(($module['badge_icon'] ?? '') . ' ' . ($module['badge_name'] ?? ''))) ?></label></div>
 </div>
 <div style="overflow:auto"><table class="table"><thead><tr><th>Catégorie</th><th>Questions actives</th><th>Cible banque</th><th>Quota par tentative</th><th>État</th></tr></thead><tbody>
 <?php foreach ($categories as $category): $enough = (int)$category['active_questions'] >= (int)$category['draw_count']; ?>
-<tr><td><strong><?= e((string)$category['name']) ?></strong><br><small><?= e((string)($category['description'] ?? '')) ?></small></td><td><?= (int)$category['active_questions'] ?></td><td><?= (int)$category['recommended_bank_size'] ?></td><td><input class="input" style="max-width:100px" type="number" min="0" max="100" name="category_count[<?= (int)$category['id'] ?>]" value="<?= (int)$category['draw_count'] ?>" required></td><td><span class="badge"><?= $enough ? 'OK' : 'À compléter' ?></span></td></tr>
+<tr><td><strong><?= e((string)$category['name']) ?></strong><br><small><?= e((string)($category['description'] ?? '')) ?></small></td><td><?= (int)$category['active_questions'] ?></td><td><?= (int)$category['recommended_bank_size'] ?></td><td><input class="input category-quota" style="max-width:100px" type="number" min="0" max="100" name="category_count[<?= (int)$category['id'] ?>]" value="<?= (int)$category['draw_count'] ?>" required></td><td><span class="badge"><?= $enough ? 'OK' : 'À compléter' ?></span></td></tr>
 <?php endforeach; ?>
 </tbody></table></div>
 <div style="margin-top:1rem"><button class="btn btn-primary" type="submit">Enregistrer la configuration</button></div>
 </form>
 </section>
 <?php endforeach; ?>
-</main></div></body></html>
+</main></div>
+<script>
+document.querySelectorAll('.module-config-form').forEach(function (form) {
+    const total = form.querySelector('.question-total');
+    const quotas = form.querySelectorAll('.category-quota');
+    const refreshTotal = function () {
+        let sum = 0;
+        quotas.forEach(function (input) {
+            const value = parseInt(input.value, 10);
+            if (!Number.isNaN(value) && value > 0) sum += value;
+        });
+        total.value = sum;
+    };
+    quotas.forEach(function (input) {
+        input.addEventListener('input', refreshTotal);
+        input.addEventListener('change', refreshTotal);
+    });
+    refreshTotal();
+});
+</script>
+</body></html>
