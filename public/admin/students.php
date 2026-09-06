@@ -68,12 +68,7 @@ $classes = $db->query('SELECT class_code, COUNT(*) AS total, SUM(active) AS acti
 $totals = $db->query('SELECT COUNT(*) AS total, COALESCE(SUM(active),0) AS active, COALESCE(SUM(must_change_password),0) AS must_change FROM students')->fetch(PDO::FETCH_ASSOC) ?: ['total'=>0,'active'=>0,'must_change'=>0];
 
 function e(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 'UTF-8'); }
-
-$nav = [
-    ['🏠','Tableau de bord','index.php'],
-    ['🧭','Modules et configuration','modules.php'],
-    ['👥','Élèves','students.php'],
-];
+$activePage = 'students.php';
 ?><!doctype html>
 <html lang="fr">
 <head>
@@ -84,12 +79,7 @@ $nav = [
 </head>
 <body>
 <div class="admin-shell">
-<aside class="sidebar">
-<a class="brand" href="../"><span class="brand-mark">⚡</span><span>Tech4U <b>QUEST</b></span></a>
-<nav class="side-nav">
-<?php foreach ($nav as $n): ?><a class="<?= $n[2] === 'students.php' ? 'active' : '' ?>" href="<?= e($n[2]) ?>"><?= $n[0] ?> <?= e($n[1]) ?></a><?php endforeach; ?>
-</nav>
-</aside>
+<?php require __DIR__.'/_sidebar.php'; ?>
 <main class="admin-main">
 <div class="page-head">
 <div><span class="eyebrow">👥 GESTION DES ÉLÈVES</span><h1>Élèves</h1><p>Synchronisation avec les identifiants stables provenant de ta base MySQL locale.</p></div>
