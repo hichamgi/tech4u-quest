@@ -3,6 +3,95 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use PDO;
+use RuntimeException;
+
 final class Student
 {
+    public function __construct(private PDO $db)
+    {
+    }
+
+    public static function buildLoginCode(string $classCode, int $studentNumber): string
+    {
+        $classCode = strtoupper(trim($classCode));
+        if ($classCode === '' || $studentNumber < 1) {
+            throw new RuntimeException('Classe ou numéro invalide.');
+        }
+
+        return $classCode . '-' . $studentNumber;
+    }
+
+    public function changeNumber(int $studentId, int $newNumber): void
+    {
+        if ($newNumber < 1) {
+            throw new RuntimeException('Le nouveau numéro doit être supérieur à zéro.');
+        }
+
+        $this->db->beginTransaction();
+
+        try {
+            $stmt = $this->db->prepare('SELECT class_code, login_code FROM students WHERE id = :id AND active = 1');
+            $stmt->execute(['id' => $studentId]);
+            $student = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$student) {
+                throw new RuntimeException('Élève introuvable.');
+            }
+
+            $newLogin = self::buildLoginCode((string)$student['class_code'], $newNumber);
+
+            $check = $this->db->prepare('SELECT id FROM students WHERE login_code = :login AND id <> :id');
+            $check->execute(['login' => $newLogin, 'id' => $studentId]);
+            if ($check->fetchColumn()) {
+                throw new RuntimeException('Ce code élève est déjà utilisé.');
+            }
+
+            $update = $this->db->prepare(
+                'UPDATE students
+                 SET student_number = :number, login_code = :login, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = :id'
+            );
+            $update->execute([
+                'number' => $newNumber,
+                'login' => $newLogin,
+                'id' => $studentId,
+            ]);
+
+            $history = $this->db->prepare(
+                'INSERT INTO student_login_history(student_id, old_login_code, new_login_code)
+                 VALUES (:student_id, :old_login, :new_login)'
+            );
+            $history->execute([
+                'student_id' => $studentId,
+                'old_login' => (string)$student['login_code'],
+                'new_login' => $newLogin,
+            ]);
+
+            $this->db->commit();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    public function setPassword(int $studentId, string $plainPassword, bool $mustChange = false): void
+    {
+        if (mb_strlen($plainPassword) < 6) {
+            throw new RuntimeException('Le mot de passe doit contenir au moins 6 caractères.');
+        }
+
+        $stmt = $this->db->prepare(
+            'UPDATE students
+             SET password_hash = :hash, must_change_password = :must_change, updated_at = CURRENT_TIMESTAMP
+             WHERE id = :id'
+        );
+        $stmt->execute([
+            'hash' => password_hash($plainPassword, PASSWORD_DEFAULT),
+            'must_change' => $mustChange ? 1 : 0,
+            'id' => $studentId,
+        ]);
+    }
 }
