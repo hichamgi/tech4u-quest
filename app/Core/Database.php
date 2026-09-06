@@ -12,68 +12,44 @@ final class Database
 
     public static function connection(): PDO
     {
-        if (self::$pdo instanceof PDO) {
-            return self::$pdo;
-        }
+        if (self::$pdo instanceof PDO) return self::$pdo;
 
         $root = dirname(__DIR__, 2);
         $config = require $root . '/config/config.php';
         $path = $config['database'];
-
         self::initializeIfMissing($path, $root . '/database/schema.sql');
 
-        self::$pdo = new PDO('sqlite:' . $path, null, null, [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        ]);
-
+        self::$pdo = new PDO('sqlite:' . $path, null, null, [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);
         self::$pdo->exec('PRAGMA foreign_keys = ON;');
         self::$pdo->exec('PRAGMA journal_mode = WAL;');
         self::$pdo->exec('PRAGMA busy_timeout = 5000;');
-
+        self::migrate(self::$pdo);
         return self::$pdo;
+    }
+
+    private static function migrate(PDO $pdo): void
+    {
+        $cols = $pdo->query('PRAGMA table_info(questions)')->fetchAll(PDO::FETCH_ASSOC);
+        $names = array_column($cols, 'name');
+        if (!in_array('exclusion_group', $names, true)) {
+            $pdo->exec('ALTER TABLE questions ADD COLUMN exclusion_group TEXT');
+        }
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_questions_exclusion_group ON questions(exclusion_group)');
     }
 
     private static function initializeIfMissing(string $databasePath, string $schemaPath): void
     {
-        if (is_file($databasePath)) {
-            return;
-        }
-
+        if (is_file($databasePath)) return;
         $directory = dirname($databasePath);
-        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
-            throw new RuntimeException('Impossible de créer le dossier de la base SQLite : ' . $directory);
-        }
-
-        if (!is_file($schemaPath) || !is_readable($schemaPath)) {
-            throw new RuntimeException('Le fichier schema.sql est introuvable ou illisible : ' . $schemaPath);
-        }
-
-        $schema = file_get_contents($schemaPath);
-        if ($schema === false || trim($schema) === '') {
-            throw new RuntimeException('Le fichier schema.sql est vide ou illisible.');
-        }
-
+        if (!is_dir($directory) && !mkdir($directory,0775,true) && !is_dir($directory)) throw new RuntimeException('Impossible de créer le dossier de la base SQLite : '.$directory);
+        if (!is_file($schemaPath) || !is_readable($schemaPath)) throw new RuntimeException('Le fichier schema.sql est introuvable ou illisible : '.$schemaPath);
+        $schema=file_get_contents($schemaPath); if($schema===false||trim($schema)==='') throw new RuntimeException('Le fichier schema.sql est vide ou illisible.');
         try {
-            $pdo = new PDO('sqlite:' . $databasePath, null, null, [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            ]);
-
-            $pdo->exec('PRAGMA foreign_keys = ON;');
-            $pdo->exec($schema);
+            $pdo=new PDO('sqlite:'.$databasePath,null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);
+            $pdo->exec('PRAGMA foreign_keys = ON;'); $pdo->exec($schema);
         } catch (\Throwable $e) {
-            if (is_file($databasePath)) {
-                @unlink($databasePath);
-                @unlink($databasePath . '-wal');
-                @unlink($databasePath . '-shm');
-            }
-
-            throw new RuntimeException(
-                'Échec de la création automatique de la base SQLite : ' . $e->getMessage(),
-                0,
-                $e
-            );
+            if(is_file($databasePath)){@unlink($databasePath);@unlink($databasePath.'-wal');@unlink($databasePath.'-shm');}
+            throw new RuntimeException('Échec de la création automatique de la base SQLite : '.$e->getMessage(),0,$e);
         }
     }
 }
