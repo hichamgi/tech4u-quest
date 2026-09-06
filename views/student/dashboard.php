@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 use App\Core\Url;
+use App\Core\DateFormatter;
 
 function e(string $value): string
 {
@@ -45,7 +46,7 @@ $status = $completed ? 'Terminé' : ($resume ? 'En cours' : ($available ? 'À co
 
 <section id="badges" style="margin-top:2rem"><div class="page-head"><div><span class="eyebrow">🏆 RÉCOMPENSES</span><h2>Mes badges</h2></div></div><div class="grid module-grid">
 <?php if (!$badges): ?><div class="card card-pad"><p>Aucun badge pour le moment. Termine un module pour débloquer le premier.</p></div><?php endif; ?>
-<?php foreach ($badges as $b): ?><article class="card module-card"><div class="module-icon"><?= e((string)($b['icon'] ?: '🏆')) ?></div><h3><?= e((string)$b['name']) ?></h3><p><?= e((string)($b['description'] ?? '')) ?></p><small><?= e((string)$b['module_title']) ?> · obtenu le <?= e((string)$b['obtained_at']) ?></small></article><?php endforeach; ?>
+<?php foreach ($badges as $b): ?><article class="card module-card"><div class="module-icon"><?= e((string)($b['icon'] ?: '🏆')) ?></div><h3><?= e((string)$b['name']) ?></h3><p><?= e((string)($b['description'] ?? '')) ?></p><small><?= e((string)$b['module_title']) ?> · obtenu le <?= e(DateFormatter::human((string)$b['obtained_at'])) ?></small></article><?php endforeach; ?>
 </div></section>
 </main>
 </body>
