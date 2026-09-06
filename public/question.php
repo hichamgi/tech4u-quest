@@ -54,7 +54,7 @@ try {
 }
 
 function e(string $v): string { return htmlspecialchars($v, ENT_QUOTES, 'UTF-8'); }
-?><!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Défi — Tech4U-QUEST</title><link rel="icon" type="image/png" href="assets/images/icon.png"><link rel="stylesheet" href="assets/css/app.css"></head><body>
+?><!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Défi — Tech4U-QUEST</title><link rel="icon" type="image/png" href="assets/images/icon.png"><link rel="stylesheet" href="assets/css/app.css"><style>.question-title{white-space:pre-wrap}.question-title.code-question{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:clamp(1rem,2.1vw,1.35rem);line-height:1.65;background:rgba(2,6,23,.55);border:1px solid rgba(148,163,184,.18);border-radius:14px;padding:1rem 1.1rem;overflow-x:auto}.answer span:last-child{white-space:pre-wrap}</style></head><body>
 <header class="site-header"><div class="container nav"><a class="brand" href="dashboard.php"><span class="brand-mark">⚡</span><span>Tech4U <b>QUEST</b></span></a><?php if ($data): ?><div class="lives" aria-label="<?= (int)$data['attempt']['lives'] ?> vies"><?= str_repeat('♥ ', (int)$data['attempt']['lives']) ?></div><?php endif; ?></div></header>
 <main class="container page">
 <?php if ($error): ?><div class="card card-pad" style="border-color:#fb7185"><strong><?= e($error) ?></strong><div style="margin-top:1rem"><a class="btn btn-secondary" href="dashboard.php">Retour au tableau de bord</a></div></div><?php elseif ($data):
@@ -62,12 +62,14 @@ $attempt = $data['attempt'];
 $position = (int)$data['position'];
 $total = (int)$attempt['total_questions'];
 $percent = (int)round((($position - 1) / max(1, $total)) * 100);
+$questionText = (string)$data['question'];
+$isCodeQuestion = str_contains($questionText, "\n") || preg_match('/(^|\n)\s*\d+[.)]\s+/m', $questionText) === 1;
 ?>
 <div class="quest-layout"><section class="card quest-card">
 <div class="question-meta"><span class="chip"><?= e((string)$data['category_name']) ?></span><strong>Question <?= $position ?> / <?= $total ?></strong></div>
 <div class="progress"><span style="width:<?= $percent ?>%"></span></div>
 <?php if ($feedback): ?><div class="card" style="padding:.9rem;margin:1rem 0;border-color:#f59e0b"><strong><?= e($feedback) ?></strong></div><?php endif; ?>
-<h1 class="question-title"><?= e((string)$data['question']) ?></h1>
+<h1 class="question-title<?= $isCodeQuestion ? ' code-question' : '' ?>"><?= e($questionText) ?></h1>
 <form method="post" action="question.php?attempt=<?= $attemptId ?>">
 <input type="hidden" name="csrf_token" value="<?= e(Auth::csrfToken()) ?>"><input type="hidden" name="attempt" value="<?= $attemptId ?>">
 <div class="answers">
