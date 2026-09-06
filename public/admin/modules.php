@@ -95,16 +95,11 @@ $categoriesStmt = $db->prepare(
 );
 
 function e(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 'UTF-8'); }
-
-$nav = [
-    ['🏠','Tableau de bord','index.php'],
-    ['🧭','Modules et configuration','modules.php'],
-    ['👥','Élèves','students.php'],
-];
+$activePage = 'modules.php';
 ?><!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Modules — Administration Tech4U-QUEST</title><link rel="stylesheet" href="../assets/css/app.css"></head>
 <body><div class="admin-shell">
-<aside class="sidebar"><a class="brand" href="../"><span class="brand-mark">⚡</span><span>Tech4U <b>QUEST</b></span></a><nav class="side-nav"><?php foreach($nav as $n): ?><a class="<?= $n[2] === 'modules.php' ? 'active' : '' ?>" href="<?= e($n[2]) ?>"><?= $n[0] ?> <?= e($n[1]) ?></a><?php endforeach; ?></nav></aside>
+<?php require __DIR__.'/_sidebar.php'; ?>
 <main class="admin-main">
 <div class="page-head"><div><span class="eyebrow">🧭 CONFIGURATION PÉDAGOGIQUE</span><h1>Modules et réglages</h1><p>Contrôle du nombre de questions, des vies, des quotas par catégorie et de la couverture de la banque.</p></div><a class="btn btn-danger" href="../logout.php">Déconnexion</a></div>
 <?php if ($message): ?><div class="card" style="padding:1rem;margin-bottom:1rem;border-color:#2dd4bf"><strong><?= e($message) ?></strong></div><?php endif; ?>
