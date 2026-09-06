@@ -1,0 +1,5 @@
+<?php
+declare(strict_types=1);
+namespace App\Controllers\Admin;
+use App\Core\Auth;use App\Core\Database;use App\Core\Url;use App\Core\View;use PDO;
+final class SettingsController{public function index():void{Auth::requireAdmin(Url::to('login'));$db=Database::connection();$message=$error=null;if(($_SERVER['REQUEST_METHOD']??'GET')==='POST'){if(!Auth::validateCsrf($_POST['csrf_token']??null))$error='Jeton de sécurité invalide.';else{$siteName=trim((string)($_POST['site_name']??''));$schoolYear=trim((string)($_POST['school_year']??''));if($siteName===''||mb_strlen($siteName)>80)$error='Nom du site invalide.';elseif(!preg_match('/^20\d{2}-20\d{2}$/',$schoolYear))$error='L’année scolaire doit être au format 2026-2027.';else{$s=$db->prepare('INSERT INTO settings(key,value) VALUES(:key,:value) ON CONFLICT(key) DO UPDATE SET value=excluded.value');$s->execute(['key'=>'site_name','value'=>$siteName]);$s->execute(['key'=>'school_year','value'=>$schoolYear]);$message='Paramètres enregistrés.';}}}$settings=$db->query('SELECT key,value FROM settings')->fetchAll(PDO::FETCH_KEY_PAIR);View::render('admin/settings',compact('settings','message','error'));}}
