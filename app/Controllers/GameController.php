@@ -14,7 +14,7 @@ final class GameController
 {
     public function question(string $attempt): void
     {
-        $student = Auth::requireStudent(Url::to('login'));
+        $student = Auth::requireStudent(Url::to('login'), Url::to('change-password'));
         $attemptId = (int)$attempt;
 
         if ($attemptId < 1) {
@@ -55,12 +55,12 @@ final class GameController
                     $result = $game->submit($attemptId, (int)$student['id'], $_POST);
 
                     if ($result['status'] === 'completed') {
-                        header('Location: ' . Url::to('module-complete.php?attempt=' . $attemptId));
+                        header('Location: ' . Url::to('attempt/' . $attemptId . '/complete'));
                         exit;
                     }
 
                     if ($result['status'] === 'game_over') {
-                        header('Location: ' . Url::to('game-over.php?attempt=' . $attemptId));
+                        header('Location: ' . Url::to('attempt/' . $attemptId . '/game-over'));
                         exit;
                     }
 
@@ -92,6 +92,44 @@ final class GameController
             'error' => $error,
             'feedback' => $feedback,
             'csrfToken' => Auth::csrfToken(),
+        ]);
+    }
+
+    public function gameOver(string $attempt): void
+    {
+        $this->renderResult((int)$attempt, 'game_over', 'game/game-over');
+    }
+
+    public function complete(string $attempt): void
+    {
+        $this->renderResult((int)$attempt, 'completed', 'game/complete');
+    }
+
+    private function renderResult(int $attemptId, string $expectedStatus, string $view): void
+    {
+        $student = Auth::requireStudent(Url::to('login'), Url::to('change-password'));
+        if ($attemptId < 1) {
+            header('Location: ' . Url::to('dashboard'));
+            exit;
+        }
+
+        $game = new GameService(Database::connection());
+        $error = null;
+        $attempt = null;
+
+        try {
+            $attempt = $game->attempt($attemptId, (int)$student['id']);
+            if ((string)$attempt['status'] !== $expectedStatus) {
+                header('Location: ' . Url::to('dashboard'));
+                exit;
+            }
+        } catch (Throwable $e) {
+            $error = $e->getMessage();
+        }
+
+        View::render($view, [
+            'attempt' => $attempt,
+            'error' => $error,
         ]);
     }
 }
