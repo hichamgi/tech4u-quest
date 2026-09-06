@@ -8,6 +8,7 @@ $adminNav = [
     ['❓', 'Questions', 'questions.php'],
     ['🔀', 'Exclusions de questions', 'question-exclusions.php'],
     ['👥', 'Élèves', 'students.php'],
+    ['🗄️', 'Archivage', 'archive.php'],
     ['⚙️', 'Paramètres', 'settings.php'],
 ];
 
