@@ -54,8 +54,6 @@ final class GameService
         $encountered=min((int)$previous['current_position'],$questionCount);
         $path=[];$usedIds=[];$usedGroups=[];
 
-        // Les positions jamais vues restent identiques. Leurs groupes sont réservés uniquement
-        // pour CETTE nouvelle tentative, pas pour les tentatives suivantes.
         foreach($oldPath as $old){
             $pos=(int)$old['position'];
             if($pos<=$encountered)continue;
@@ -64,17 +62,11 @@ final class GameService
             $g=trim((string)($old['exclusion_group']??''));if($g!=='')$usedGroups[$g]=true;
         }
 
-        // Pour les positions déjà rencontrées, éviter en priorité la même question.
-        // Le groupe utilisé lors de la tentative précédente n'est PAS interdit : seul le groupe
-        // déjà présent dans la nouvelle tentative est pris en compte.
         foreach($oldPath as $old){
             $pos=(int)$old['position'];if($pos>$encountered)continue;
             $oldId=(int)$old['question_id'];$categoryId=(int)$old['category_id'];
             $qid=$this->randomQuestionForCategory($categoryId,array_values(array_unique(array_merge($usedIds,[$oldId]))),array_keys($usedGroups),false);
-            if($qid===null){
-                // Aucune autre question compatible : autoriser l'ancienne question en dernier recours.
-                $qid=$this->randomQuestionForCategory($categoryId,$usedIds,array_keys($usedGroups),true);
-            }
+            if($qid===null){$qid=$this->randomQuestionForCategory($categoryId,$usedIds,array_keys($usedGroups),true);}
             $path[$pos]=$qid;$usedIds[]=$qid;
             $meta=$this->questionMeta($qid);$g=trim((string)($meta['exclusion_group']??''));if($g!=='')$usedGroups[$g]=true;
         }
@@ -117,7 +109,7 @@ final class GameService
 
     public function currentQuestion(int $attemptId,int $studentId): array
     {
-        $attempt=$this->attempt($attemptId,$studentId);if((string)$attempt['status']!=='in_progress')throw new RuntimeException('Cette tentative est terminée.');$stmt=$this->db->prepare('SELECT aq.id AS attempt_question_id,aq.position,aq.wrong_answers,q.id,q.question,q.type,q.difficulty,q.explanation,q.lesson,q.topic,c.name AS category_name FROM attempt_questions aq JOIN questions q ON q.id=aq.question_id JOIN categories c ON c.id=q.category_id WHERE aq.attempt_id=:attempt AND aq.position=:position');$stmt->execute(['attempt'=>$attemptId,'position'=>$attempt['current_position']]);$question=$stmt->fetch(PDO::FETCH_ASSOC);if(!$question)throw new RuntimeException('Question courante introuvable.');$ans=$this->db->prepare('SELECT id,answer,display_order FROM question_answers WHERE question_id=:question ORDER BY display_order,id');$ans->execute(['question'=>$question['id']]);$question['answers']=$ans->fetchAll(PDO::FETCH_ASSOC);$question['attempt']=$attempt;return $question;
+        $attempt=$this->attempt($attemptId,$studentId);if((string)$attempt['status']!=='in_progress')throw new RuntimeException('Cette tentative est terminée.');$stmt=$this->db->prepare('SELECT aq.id AS attempt_question_id,aq.position,aq.wrong_answers,q.id,q.question,q.type,q.difficulty,q.explanation,q.lesson,q.topic,c.name AS category_name FROM attempt_questions aq JOIN questions q ON q.id=aq.question_id JOIN categories c ON c.id=q.category_id WHERE aq.attempt_id=:attempt AND aq.position=:position');$stmt->execute(['attempt'=>$attemptId,'position'=>$attempt['current_position']]);$question=$stmt->fetch(PDO::FETCH_ASSOC);if(!$question)throw new RuntimeException('Question courante introuvable.');$ans=$this->db->prepare('SELECT id,answer,display_order FROM question_answers WHERE question_id=:question ORDER BY RANDOM()');$ans->execute(['question'=>$question['id']]);$question['answers']=$ans->fetchAll(PDO::FETCH_ASSOC);$question['attempt']=$attempt;return $question;
     }
 
     public function submit(int $attemptId,int $studentId,array $input): array
@@ -132,6 +124,6 @@ final class GameService
 
     private function awardBadge(int $studentId,int $moduleId,int $attemptId): void
     {
-        $stmt=$this->db->prepare('SELECT id FROM badges WHERE module_id=:module');$stmt->execute(['module'=>$moduleId]);$badgeId=$stmt->fetchColumn();if($badgeId===false)return;$insert=$this->db->prepare('INSERT OR IGNORE INTO student_badges(student_id,badge_id,attempt_id) VALUES(:student,:badge,:attempt)');$insert->execute(['student'=>$studentId,'badge'=>(int)$badgeId,'attempt'=>$attemptId]);
+        $stmt=$this->db->prepare('SELECT b.id FROM badges b JOIN module_settings ms ON ms.module_id=b.module_id WHERE b.module_id=:module AND ms.badge_enabled=1 LIMIT 1');$stmt->execute(['module'=>$moduleId]);$badgeId=$stmt->fetchColumn();if($badgeId===false)return;$insert=$this->db->prepare('INSERT OR IGNORE INTO student_badges(student_id,badge_id,attempt_id) VALUES(:student,:badge,:attempt)');$insert->execute(['student'=>$studentId,'badge'=>(int)$badgeId,'attempt'=>$attemptId]);
     }
 }
