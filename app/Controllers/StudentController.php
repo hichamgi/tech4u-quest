@@ -13,12 +13,19 @@ use Throwable;
 
 final class StudentController
 {
+    private function isDemoStudent(PDO $db, int $studentId): bool
+    {
+        $stmt = $db->prepare('SELECT UPPER(TRIM(class_code)) FROM students WHERE id=:id LIMIT 1');
+        $stmt->execute(['id' => $studentId]);
+        return (string)$stmt->fetchColumn() === 'DEMO';
+    }
+
     public function dashboard(): void
     {
         $student = Auth::requireStudent(Url::to('login'));
         $db = Database::connection();
         $game = new GameService($db);
-        $isDemo = strtoupper((string)($student['class_code'] ?? '')) === 'DEMO';
+        $isDemo = $this->isDemoStudent($db, (int)$student['id']);
         $modules = $game->modulesForStudent((int)$student['id'], $isDemo);
 
         $badgeCountStmt = $db->prepare('SELECT COUNT(*) FROM student_badges WHERE student_id=:student');
@@ -48,8 +55,9 @@ final class StudentController
     {
         $student = Auth::requireStudent(Url::to('login'));
         $moduleId = max(1, (int)$id);
-        $game = new GameService(Database::connection());
-        $isDemo = strtoupper((string)($student['class_code'] ?? '')) === 'DEMO';
+        $db = Database::connection();
+        $game = new GameService($db);
+        $isDemo = $this->isDemoStudent($db, (int)$student['id']);
         $module = null;
         $paths = [];
         $error = null;
@@ -75,7 +83,9 @@ final class StudentController
         $student = Auth::requireStudent(Url::to('login'));
         $moduleId = max(1, (int)$id);
         $pathId = max(0, (int)($_POST['path_id'] ?? 0));
-        $isDemo = strtoupper((string)($student['class_code'] ?? '')) === 'DEMO';
+        $db = Database::connection();
+        $game = new GameService($db);
+        $isDemo = $this->isDemoStudent($db, (int)$student['id']);
 
         if (!Auth::validateCsrf(is_string($_POST['csrf_token'] ?? null) ? $_POST['csrf_token'] : null)) {
             http_response_code(419);
@@ -88,8 +98,6 @@ final class StudentController
             ]);
             return;
         }
-
-        $game = new GameService(Database::connection());
 
         try {
             if ($pathId < 1) {
