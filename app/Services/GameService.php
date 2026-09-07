@@ -12,7 +12,7 @@ final class GameService
 
     public function modulesForStudent(int $studentId, bool $includeInactive = false): array
     {
-        $stmt=$this->db->prepare('SELECT m.id,m.title,m.description,m.icon,ms.question_count,ms.initial_lives,(SELECT COUNT(*) FROM questions q JOIN categories c2 ON c2.id=q.category_id WHERE c2.module_id=m.id AND q.active=1) AS bank_size,(SELECT MAX(a.score) FROM attempts a WHERE a.student_id=:student_best AND a.module_id=m.id) AS best_score,(SELECT a2.id FROM attempts a2 WHERE a2.student_id=:student_current AND a2.module_id=m.id AND a2.status="in_progress" ORDER BY a2.id DESC LIMIT 1) AS current_attempt_id,EXISTS(SELECT 1 FROM attempts ac WHERE ac.student_id=:student_completed AND ac.module_id=m.id AND ac.status="completed") AS completed,b.id AS badge_id,b.name AS badge_name,b.icon AS badge_icon,EXISTS(SELECT 1 FROM student_badges sb WHERE sb.student_id=:student_badge AND sb.badge_id=b.id) AS badge_obtained FROM modules m JOIN module_settings ms ON ms.module_id=m.id LEFT JOIN badges b ON b.module_id=m.id WHERE (m.active=1 OR :include_inactive=1) ORDER BY m.display_order,m.id');
+        $stmt=$this->db->prepare('SELECT m.id,m.title,m.description,m.icon,ms.question_count,ms.initial_lives,(SELECT COUNT(*) FROM questions q JOIN categories c2 ON c2.id=q.category_id WHERE c2.module_id=m.id AND q.active=1) AS bank_size,(SELECT MAX(a.score) FROM attempts a WHERE a.student_id=:student_best AND a.module_id=m.id) AS best_score,(SELECT a2.id FROM attempts a2 WHERE a2.student_id=:student_current AND a2.module_id=m.id AND a2.status="in_progress" ORDER BY a2.id DESC LIMIT 1) AS current_attempt_id,EXISTS(SELECT 1 FROM attempts ac WHERE ac.student_id=:student_completed AND ac.module_id=m.id AND ac.status="completed") AS completed,b.id AS badge_id,b.name AS badge_name,b.icon AS badge_icon,EXISTS(SELECT 1 FROM student_badges sb WHERE sb.student_id=:student_badge AND sb.badge_id=b.id) AS badge_obtained FROM modules m JOIN module_settings ms ON ms.module_id=m.id LEFT JOIN badges b ON b.module_id=m.id WHERE (m.active=1 OR CAST(:include_inactive AS INTEGER)=1) ORDER BY m.display_order,m.id');
         $stmt->execute([
             'student_best'=>$studentId,'student_current'=>$studentId,'student_completed'=>$studentId,'student_badge'=>$studentId,
             'include_inactive'=>$includeInactive?1:0,
@@ -22,7 +22,7 @@ final class GameService
 
     public function module(int $moduleId, bool $includeInactive = false): array
     {
-        $stmt=$this->db->prepare('SELECT m.*,ms.question_count,ms.initial_lives,ms.badge_enabled,b.name AS badge_name,b.description AS badge_description,b.icon AS badge_icon FROM modules m JOIN module_settings ms ON ms.module_id=m.id LEFT JOIN badges b ON b.module_id=m.id WHERE m.id=:id AND (m.active=1 OR :include_inactive=1)');
+        $stmt=$this->db->prepare('SELECT m.*,ms.question_count,ms.initial_lives,ms.badge_enabled,b.name AS badge_name,b.description AS badge_description,b.icon AS badge_icon FROM modules m JOIN module_settings ms ON ms.module_id=m.id LEFT JOIN badges b ON b.module_id=m.id WHERE m.id=:id AND (m.active=1 OR CAST(:include_inactive AS INTEGER)=1)');
         $stmt->execute(['id'=>$moduleId,'include_inactive'=>$includeInactive?1:0]);
         $module=$stmt->fetch(PDO::FETCH_ASSOC);
         if(!$module) throw new RuntimeException('Module introuvable.');
