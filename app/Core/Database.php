@@ -35,6 +35,62 @@ final class Database
             $pdo->exec('ALTER TABLE questions ADD COLUMN exclusion_group TEXT');
         }
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_questions_exclusion_group ON questions(exclusion_group)');
+
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS module_paths (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                module_id INTEGER NOT NULL,
+                code TEXT NOT NULL CHECK(code IN ('discovery','training','mastery','expert')),
+                name TEXT NOT NULL,
+                icon TEXT,
+                description TEXT,
+                pool_percent INTEGER NOT NULL CHECK(pool_percent BETWEEN 1 AND 100),
+                question_count INTEGER NOT NULL CHECK(question_count > 0),
+                display_order INTEGER NOT NULL DEFAULT 0,
+                active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+                FOREIGN KEY(module_id) REFERENCES modules(id) ON DELETE CASCADE,
+                UNIQUE(module_id, code)
+            )"
+        );
+
+        $attemptCols = $pdo->query('PRAGMA table_info(attempts)')->fetchAll(PDO::FETCH_ASSOC);
+        $attemptNames = array_column($attemptCols, 'name');
+        if (!in_array('path_id', $attemptNames, true)) {
+            $pdo->exec('ALTER TABLE attempts ADD COLUMN path_id INTEGER REFERENCES module_paths(id)');
+        }
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_attempts_path ON attempts(path_id)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_module_paths_module ON module_paths(module_id)');
+
+        $paths = [
+            1 => [6, 8, 10, 12],
+            2 => [8, 10, 12, 15],
+            3 => [8, 12, 15, 20],
+            4 => [7, 10, 12, 15],
+        ];
+        $defs = [
+            ['discovery', 'Découverte', '🟢', 'Découvre les notions essentielles avec les questions les plus accessibles.', 25, 1],
+            ['training', 'Entraînement', '🔵', 'Élargis ton entraînement avec une plus grande partie de la banque.', 50, 2],
+            ['mastery', 'Maîtrise', '🟠', 'Consolide tes acquis avec un parcours plus exigeant.', 75, 3],
+            ['expert', 'Expert', '🔴', 'Relève le défi complet avec toute la banque de questions.', 100, 4],
+        ];
+        $insert = $pdo->prepare(
+            'INSERT OR IGNORE INTO module_paths(module_id,code,name,icon,description,pool_percent,question_count,display_order,active)
+             VALUES(:module,:code,:name,:icon,:description,:pool,:count,:ord,1)'
+        );
+        foreach ($paths as $moduleId => $counts) {
+            foreach ($defs as $i => $def) {
+                $insert->execute([
+                    'module' => $moduleId,
+                    'code' => $def[0],
+                    'name' => $def[1],
+                    'icon' => $def[2],
+                    'description' => $def[3],
+                    'pool' => $def[4],
+                    'count' => $counts[$i],
+                    'ord' => $def[5],
+                ]);
+            }
+        }
     }
 
     private static function initializeIfMissing(string $databasePath, string $schemaPath): void
