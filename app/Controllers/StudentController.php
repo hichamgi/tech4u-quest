@@ -18,7 +18,8 @@ final class StudentController
         $student = Auth::requireStudent(Url::to('login'));
         $db = Database::connection();
         $game = new GameService($db);
-        $modules = $game->modulesForStudent((int)$student['id']);
+        $isDemo = strtoupper((string)($student['class_code'] ?? '')) === 'DEMO';
+        $modules = $game->modulesForStudent((int)$student['id'], $isDemo);
 
         $badgeCountStmt = $db->prepare('SELECT COUNT(*) FROM student_badges WHERE student_id=:student');
         $badgeCountStmt->execute(['student' => $student['id']]);
@@ -48,11 +49,12 @@ final class StudentController
         $student = Auth::requireStudent(Url::to('login'));
         $moduleId = max(1, (int)$id);
         $game = new GameService(Database::connection());
+        $isDemo = strtoupper((string)($student['class_code'] ?? '')) === 'DEMO';
         $module = null;
         $error = null;
 
         try {
-            $module = $game->module($moduleId);
+            $module = $game->module($moduleId, $isDemo);
         } catch (Throwable $e) {
             $error = $e->getMessage();
         }
@@ -69,6 +71,7 @@ final class StudentController
     {
         $student = Auth::requireStudent(Url::to('login'));
         $moduleId = max(1, (int)$id);
+        $isDemo = strtoupper((string)($student['class_code'] ?? '')) === 'DEMO';
 
         if (!Auth::validateCsrf(is_string($_POST['csrf_token'] ?? null) ? $_POST['csrf_token'] : null)) {
             http_response_code(419);
@@ -84,14 +87,14 @@ final class StudentController
         $game = new GameService(Database::connection());
 
         try {
-            $game->module($moduleId);
-            $attemptId = $game->startOrResume((int)$student['id'], $moduleId);
+            $game->module($moduleId, $isDemo);
+            $attemptId = $game->startOrResume((int)$student['id'], $moduleId, $isDemo);
             header('Location: ' . Url::to('question/' . $attemptId));
             exit;
         } catch (Throwable $e) {
             $module = null;
             try {
-                $module = $game->module($moduleId);
+                $module = $game->module($moduleId, $isDemo);
             } catch (Throwable) {
             }
 
