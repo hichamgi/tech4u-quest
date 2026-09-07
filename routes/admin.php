@@ -6,6 +6,7 @@ use App\Controllers\Admin\DashboardController;
 use App\Controllers\Admin\ModuleController;
 use App\Controllers\Admin\QuestionController;
 use App\Controllers\Admin\SettingsController;
+use App\Controllers\Admin\StatisticsController;
 use App\Controllers\Admin\StudentController;
 use App\Core\Router;
 use App\Core\Url;
@@ -13,6 +14,7 @@ use App\Core\Url;
 /** @var Router $router */
 $router->get('/admin', [DashboardController::class, 'index']);
 $router->get('/admin/', [DashboardController::class, 'index']);
+$router->get('/admin/statistics', [StatisticsController::class, 'index']);
 $router->get('/admin/modules', [ModuleController::class, 'index']);
 $router->post('/admin/modules', [ModuleController::class, 'index']);
 $router->get('/admin/students', [StudentController::class, 'index']);
