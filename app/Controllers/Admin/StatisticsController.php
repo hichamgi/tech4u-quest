@@ -67,7 +67,7 @@ final class StatisticsController
         )->fetchAll(PDO::FETCH_ASSOC);
 
         $pathStats = $db->query(
-            "SELECT p.id,p.code,p.name,p.icon,p.pool_percent,p.display_order,
+            "SELECT p.code,p.name,p.icon,p.pool_percent,p.display_order,
                     COUNT(a.id) AS attempts,
                     COUNT(CASE WHEN a.status='completed' THEN 1 END) AS completed,
                     COUNT(DISTINCT CASE WHEN a.status='completed' THEN a.student_id END) AS students_completed
@@ -75,8 +75,8 @@ final class StatisticsController
              LEFT JOIN attempts a ON a.path_id=p.id
              LEFT JOIN students s ON s.id=a.student_id AND {$studentFilter}
              WHERE a.id IS NULL OR s.id IS NOT NULL
-             GROUP BY p.id
-             ORDER BY p.display_order,p.id"
+             GROUP BY p.code,p.name,p.icon,p.pool_percent,p.display_order
+             ORDER BY p.display_order"
         )->fetchAll(PDO::FETCH_ASSOC);
 
         $classStats = $db->query(
