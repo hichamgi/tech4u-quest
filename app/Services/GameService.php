@@ -10,29 +10,29 @@ final class GameService
 {
     public function __construct(private PDO $db) {}
 
-    public function modulesForStudent(int $studentId): array
+    public function modulesForStudent(int $studentId, bool $includeInactive = false): array
     {
-        $stmt=$this->db->prepare('SELECT m.id,m.title,m.description,m.icon,ms.question_count,ms.initial_lives,(SELECT COUNT(*) FROM questions q JOIN categories c2 ON c2.id=q.category_id WHERE c2.module_id=m.id AND q.active=1) AS bank_size,(SELECT MAX(a.score) FROM attempts a WHERE a.student_id=:student_id AND a.module_id=m.id) AS best_score,(SELECT a2.id FROM attempts a2 WHERE a2.student_id=:student_id AND a2.module_id=m.id AND a2.status="in_progress" ORDER BY a2.id DESC LIMIT 1) AS current_attempt_id,EXISTS(SELECT 1 FROM attempts ac WHERE ac.student_id=:student_id AND ac.module_id=m.id AND ac.status="completed") AS completed,b.id AS badge_id,b.name AS badge_name,b.icon AS badge_icon,EXISTS(SELECT 1 FROM student_badges sb WHERE sb.student_id=:student_id AND sb.badge_id=b.id) AS badge_obtained FROM modules m JOIN module_settings ms ON ms.module_id=m.id LEFT JOIN badges b ON b.module_id=m.id WHERE m.active=1 ORDER BY m.display_order,m.id');
-        $stmt->execute(['student_id'=>$studentId]); return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $stmt=$this->db->prepare('SELECT m.id,m.title,m.description,m.icon,ms.question_count,ms.initial_lives,(SELECT COUNT(*) FROM questions q JOIN categories c2 ON c2.id=q.category_id WHERE c2.module_id=m.id AND q.active=1) AS bank_size,(SELECT MAX(a.score) FROM attempts a WHERE a.student_id=:student_id AND a.module_id=m.id) AS best_score,(SELECT a2.id FROM attempts a2 WHERE a2.student_id=:student_id AND a2.module_id=m.id AND a2.status="in_progress" ORDER BY a2.id DESC LIMIT 1) AS current_attempt_id,EXISTS(SELECT 1 FROM attempts ac WHERE ac.student_id=:student_id AND ac.module_id=m.id AND ac.status="completed") AS completed,b.id AS badge_id,b.name AS badge_name,b.icon AS badge_icon,EXISTS(SELECT 1 FROM student_badges sb WHERE sb.student_id=:student_id AND sb.badge_id=b.id) AS badge_obtained FROM modules m JOIN module_settings ms ON ms.module_id=m.id LEFT JOIN badges b ON b.module_id=m.id WHERE (m.active=1 OR :include_inactive=1) ORDER BY m.display_order,m.id');
+        $stmt->execute(['student_id'=>$studentId,'include_inactive'=>$includeInactive?1:0]); return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function module(int $moduleId): array
+    public function module(int $moduleId, bool $includeInactive = false): array
     {
-        $stmt=$this->db->prepare('SELECT m.*,ms.question_count,ms.initial_lives,ms.badge_enabled,b.name AS badge_name,b.description AS badge_description,b.icon AS badge_icon FROM modules m JOIN module_settings ms ON ms.module_id=m.id LEFT JOIN badges b ON b.module_id=m.id WHERE m.id=:id AND m.active=1');
-        $stmt->execute(['id'=>$moduleId]);$module=$stmt->fetch(PDO::FETCH_ASSOC);if(!$module)throw new RuntimeException('Module introuvable.');
+        $stmt=$this->db->prepare('SELECT m.*,ms.question_count,ms.initial_lives,ms.badge_enabled,b.name AS badge_name,b.description AS badge_description,b.icon AS badge_icon FROM modules m JOIN module_settings ms ON ms.module_id=m.id LEFT JOIN badges b ON b.module_id=m.id WHERE m.id=:id AND (m.active=1 OR :include_inactive=1)');
+        $stmt->execute(['id'=>$moduleId,'include_inactive'=>$includeInactive?1:0]);$module=$stmt->fetch(PDO::FETCH_ASSOC);if(!$module)throw new RuntimeException('Module introuvable.');
         $cats=$this->db->prepare('SELECT c.id,c.name,c.description,c.recommended_bank_size,COALESCE(mcs.question_count,0) AS draw_count,COUNT(CASE WHEN q.active=1 THEN q.id END) AS active_questions FROM categories c LEFT JOIN module_category_settings mcs ON mcs.category_id=c.id AND mcs.module_id=c.module_id LEFT JOIN questions q ON q.category_id=c.id WHERE c.module_id=:module_id AND c.active=1 GROUP BY c.id ORDER BY c.display_order,c.id');
         $cats->execute(['module_id'=>$moduleId]);$module['categories']=$cats->fetchAll(PDO::FETCH_ASSOC);return $module;
     }
 
-    public function startOrResume(int $studentId,int $moduleId): int
+    public function startOrResume(int $studentId,int $moduleId,bool $includeInactive=false): int
     {
-        $this->module($moduleId);$stmt=$this->db->prepare('SELECT id FROM attempts WHERE student_id=:student AND module_id=:module AND status="in_progress" ORDER BY id DESC LIMIT 1');$stmt->execute(['student'=>$studentId,'module'=>$moduleId]);$existing=$stmt->fetchColumn();if($existing!==false)return(int)$existing;
-        $lastStmt=$this->db->prepare('SELECT * FROM attempts WHERE student_id=:student AND module_id=:module ORDER BY id DESC LIMIT 1');$lastStmt->execute(['student'=>$studentId,'module'=>$moduleId]);$last=$lastStmt->fetch(PDO::FETCH_ASSOC)?:null;return $this->createAttempt($studentId,$moduleId,$last);
+        $this->module($moduleId,$includeInactive);$stmt=$this->db->prepare('SELECT id FROM attempts WHERE student_id=:student AND module_id=:module AND status="in_progress" ORDER BY id DESC LIMIT 1');$stmt->execute(['student'=>$studentId,'module'=>$moduleId]);$existing=$stmt->fetchColumn();if($existing!==false)return(int)$existing;
+        $lastStmt=$this->db->prepare('SELECT * FROM attempts WHERE student_id=:student AND module_id=:module ORDER BY id DESC LIMIT 1');$lastStmt->execute(['student'=>$studentId,'module'=>$moduleId]);$last=$lastStmt->fetch(PDO::FETCH_ASSOC)?:null;return $this->createAttempt($studentId,$moduleId,$last,$includeInactive);
     }
 
-    private function createAttempt(int $studentId,int $moduleId,?array $previous): int
+    private function createAttempt(int $studentId,int $moduleId,?array $previous,bool $includeInactive=false): int
     {
-        $module=$this->module($moduleId);$questionCount=(int)$module['question_count'];$initialLives=(int)$module['initial_lives'];$attemptNumber=$previous?((int)$previous['attempt_number']+1):1;
+        $module=$this->module($moduleId,$includeInactive);$questionCount=(int)$module['question_count'];$initialLives=(int)$module['initial_lives'];$attemptNumber=$previous?((int)$previous['attempt_number']+1):1;
 
         if($previous&&(string)$previous['status']==='game_over'){
             $path=$this->buildRetryPath($moduleId,$previous,$questionCount);
