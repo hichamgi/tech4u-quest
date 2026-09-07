@@ -18,7 +18,6 @@ final class StatisticsController
         $admin = Auth::requireAdmin(Url::to('login'));
         $db = Database::connection();
 
-        // Les comptes DEMO servent aux tests et sont volontairement exclus des statistiques.
         $studentFilter = "s.active=1 AND UPPER(s.class_code) <> 'DEMO'";
 
         $kpis = $db->query(
@@ -65,6 +64,19 @@ final class StatisticsController
              WHERE a.id IS NULL OR s.id IS NOT NULL
              GROUP BY m.id
              ORDER BY m.display_order,m.id"
+        )->fetchAll(PDO::FETCH_ASSOC);
+
+        $pathStats = $db->query(
+            "SELECT p.id,p.code,p.name,p.icon,p.pool_percent,p.display_order,
+                    COUNT(a.id) AS attempts,
+                    COUNT(CASE WHEN a.status='completed' THEN 1 END) AS completed,
+                    COUNT(DISTINCT CASE WHEN a.status='completed' THEN a.student_id END) AS students_completed
+             FROM module_paths p
+             LEFT JOIN attempts a ON a.path_id=p.id
+             LEFT JOIN students s ON s.id=a.student_id AND {$studentFilter}
+             WHERE a.id IS NULL OR s.id IS NOT NULL
+             GROUP BY p.id
+             ORDER BY p.display_order,p.id"
         )->fetchAll(PDO::FETCH_ASSOC);
 
         $classStats = $db->query(
@@ -115,6 +127,6 @@ final class StatisticsController
             'success_rate' => $successRate,
         ];
 
-        View::render('admin/statistics', compact('admin','kpis','moduleStats','classStats','activity'));
+        View::render('admin/statistics', compact('admin','kpis','moduleStats','pathStats','classStats','activity'));
     }
 }
