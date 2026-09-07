@@ -74,12 +74,13 @@ final class Database
             ['expert', 'Expert', '🔴', 'Relève le défi complet avec toute la banque de questions.', 100, 4],
         ];
         $insert = $pdo->prepare(
-            'INSERT OR IGNORE INTO module_paths(module_id,code,name,icon,description,pool_percent,question_count,display_order,active)
-             VALUES(:module,:code,:name,:icon,:description,:pool,:count,:ord,1)'
+            'INSERT OR IGNORE INTO module_paths(id,module_id,code,name,icon,description,pool_percent,question_count,display_order,active)
+             VALUES(:id,:module,:code,:name,:icon,:description,:pool,:count,:ord,1)'
         );
         foreach ($paths as $moduleId => $counts) {
             foreach ($defs as $i => $def) {
                 $insert->execute([
+                    'id' => ($moduleId * 100) + ($i + 1),
                     'module' => $moduleId,
                     'code' => $def[0],
                     'name' => $def[1],
