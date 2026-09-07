@@ -16,6 +16,7 @@ final class GameController
     {
         $student = Auth::requireStudent(Url::to('login'), Url::to('change-password'));
         $attemptId = (int)$attempt;
+        $isDemo = strtoupper((string)($student['class_code'] ?? '')) === 'DEMO';
 
         if ($attemptId < 1) {
             header('Location: ' . Url::to('dashboard'));
@@ -42,7 +43,7 @@ final class GameController
         $moduleActive = $moduleAccessStmt->fetchColumn();
         if ($moduleActive === false) {
             $error = 'Tentative introuvable.';
-        } elseif ((int)$moduleActive !== 1) {
+        } elseif ((int)$moduleActive !== 1 && !$isDemo) {
             $error = 'Ce module n’est pas encore disponible. Il sera activé après son traitement en classe.';
         }
 
