@@ -6,6 +6,7 @@ use App\Core\Url;
 $activePage = $activePage ?? '';
 $items = [
     ['key'=>'dashboard','icon'=>'📊','label'=>'Tableau de bord','url'=>Url::to('admin')],
+    ['key'=>'statistics','icon'=>'📈','label'=>'Statistiques','url'=>Url::to('admin/statistics')],
     ['key'=>'modules','icon'=>'🧭','label'=>'Modules et configuration','url'=>Url::to('admin/modules')],
     ['key'=>'questions','icon'=>'❓','label'=>'Questions','url'=>Url::to('admin/questions')],
     ['key'=>'exclusions','icon'=>'🔀','label'=>'Exclusions de questions','url'=>Url::to('admin/questions/exclusions')],
