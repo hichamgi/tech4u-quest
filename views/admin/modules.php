@@ -22,11 +22,13 @@ $isActive=(int)$module['active']===1;
 <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:1rem"><div class="form-group"><label class="label">Disponibilité élèves</label><label><input type="checkbox" name="module_active" value="1" <?=$isActive?'checked':''?>> <strong>Module actif</strong></label></div><div class="form-group"><label class="label">Quota pédagogique total</label><input class="input question-total" type="number" value="<?=$quotaTotal?>" readonly><small style="color:var(--muted)">Correspond au nombre de questions du mode Expert.</small></div><div class="form-group"><label class="label">Badges de niveaux</label><label><input type="checkbox" name="badge_enabled" value="1" <?= (int)$module['badge_enabled']===1?'checked':''?>> Activer l'attribution des badges</label></div></div>
 
 <h3 style="margin:1.4rem 0 .75rem">Niveaux du module</h3>
-<p style="color:var(--muted);margin-top:0">Les pourcentages représentent maintenant une part du <strong>quota pédagogique total</strong>, et non une part de la banque de questions. Le nombre de questions est calculé automatiquement.</p>
-<div style="overflow:auto"><table class="table"><thead><tr><th>Niveau</th><th>Part du quota</th><th>Questions / tentative</th><th>Badge</th><th>Élèves avec badge</th><th>Actif</th></tr></thead><tbody>
+<p style="color:var(--muted);margin-top:0">Les niveaux ne sont pas activés manuellement. <strong>Facile</strong> est disponible dès le départ, puis le badge Facile débloque Moyen, le badge Moyen débloque Difficile et le badge Difficile débloque Expert.</p>
+<div style="overflow:auto"><table class="table"><thead><tr><th>Niveau</th><th>Part du quota</th><th>Questions / tentative</th><th>Badge</th><th>Élèves avec badge</th><th>Déblocage</th></tr></thead><tbody>
 <?php foreach($paths as $path):
 $levelPercent=(int)$path['pool_percent'];
 $computedQuestions=max(1,(int)ceil($quotaTotal*($levelPercent/100)));
+$order=(int)$path['display_order'];
+$unlockText=match($order){1=>'Disponible au départ',2=>'Après badge Facile',3=>'Après badge Moyen',4=>'Après badge Difficile',default=>'Automatique'};
 ?>
 <tr>
 <td><strong><?=e_admin_modules((string)($path['icon']?:'🎯'))?> <?=e_admin_modules((string)$path['name'])?></strong><br><small><?=e_admin_modules((string)($path['description']??''))?></small></td>
@@ -34,7 +36,7 @@ $computedQuestions=max(1,(int)ceil($quotaTotal*($levelPercent/100)));
 <td><strong class="level-question-count" data-percent="<?= $levelPercent ?>"><?= $computedQuestions ?></strong></td>
 <td><?=e_admin_modules((string)($path['badge_icon']?:$path['icon']?:'🏅'))?> <?=e_admin_modules((string)($path['badge_name']??('Badge '.$path['name'])))?></td>
 <td><?= (int)($path['badge_holders']??0)?></td>
-<td><label><input type="checkbox" name="path_active[<?= (int)$path['id']?>]" value="1" <?= (int)$path['active']===1?'checked':''?> <?= (int)$path['display_order']===1?'disabled':''?>> <?= (int)$path['display_order']===1?'Toujours actif':'Actif' ?></label><?php if((int)$path['display_order']===1):?><input type="hidden" name="path_active[<?= (int)$path['id']?>]" value="1"><?php endif;?></td>
+<td><span class="chip"><?= e_admin_modules($unlockText) ?></span></td>
 </tr>
 <?php endforeach;?>
 </tbody></table></div>
