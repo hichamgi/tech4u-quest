@@ -26,10 +26,9 @@ final class ModuleController
             } else {
                 try {
                     $moduleId = filter_var($_POST['module_id'] ?? null, FILTER_VALIDATE_INT, ['options'=>['min_range'=>1]]);
-                    $initialLives = filter_var($_POST['initial_lives'] ?? null, FILTER_VALIDATE_INT, ['options'=>['min_range'=>1,'max_range'=>20]]);
                     $badgeEnabled = isset($_POST['badge_enabled']) ? 1 : 0;
                     $moduleActive = isset($_POST['module_active']) ? 1 : 0;
-                    if ($moduleId === false || $initialLives === false) throw new RuntimeException('Paramètres du module invalides.');
+                    if ($moduleId === false) throw new RuntimeException('Paramètres du module invalides.');
                     $categoryCounts = $_POST['category_count'] ?? [];
                     if (!is_array($categoryCounts)) throw new RuntimeException('Quotas de catégories invalides.');
 
@@ -73,12 +72,12 @@ final class ModuleController
                         $updatePath->execute(['count'=>$count,'pool'=>$pool,'active'=>$active,'id'=>$pathId,'module'=>$moduleId]);
                     }
 
-                    $stmt = $db->prepare('UPDATE module_settings SET question_count=:q,initial_lives=:l,badge_enabled=:b WHERE module_id=:m');
-                    $stmt->execute(['q'=>$quotaSum,'l'=>$initialLives,'b'=>$badgeEnabled,'m'=>$moduleId]);
+                    $stmt = $db->prepare('UPDATE module_settings SET question_count=:q,initial_lives=3,badge_enabled=:b WHERE module_id=:m');
+                    $stmt->execute(['q'=>$quotaSum,'b'=>$badgeEnabled,'m'=>$moduleId]);
                     $stmt = $db->prepare('UPDATE modules SET active=:active WHERE id=:id');
                     $stmt->execute(['active'=>$moduleActive,'id'=>$moduleId]);
                     $db->commit();
-                    $message = 'Configuration enregistrée. Les quatre niveaux et leurs badges sont pris en compte.';
+                    $message = 'Configuration enregistrée. Les quatre niveaux utilisent 3 vies par tentative.';
                 } catch (Throwable $e) {
                     if ($db->inTransaction()) $db->rollBack();
                     $error = $e->getMessage();
