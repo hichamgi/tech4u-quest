@@ -4,7 +4,7 @@ use App\Core\Auth;
 function e_admin_modules(string $v): string{return htmlspecialchars($v,ENT_QUOTES,'UTF-8');}
 $title='Modules — Administration Tech4U-QUEST';$activePage='modules';require __DIR__.'/_header.php';
 ?>
-<div class="page-head"><div><span class="eyebrow">🧭 CONFIGURATION PÉDAGOGIQUE</span><h1>Modules et réglages</h1><p>Définis la répartition pédagogique par catégorie. Le niveau Expert utilise le quota complet ; Facile, Moyen et Difficile utilisent automatiquement 25 %, 50 % et 75 % de ce quota. Toutes les tentatives utilisent 3 vies.</p></div></div>
+<div class="page-head"><div><span class="eyebrow">🧭 CONFIGURATION PÉDAGOGIQUE</span><h1>Modules et réglages</h1><p>Définis la répartition pédagogique par catégorie. Le niveau Expert utilise le quota complet ; Facile, Moyen et Difficile utilisent automatiquement 25 %, 50 % et 75 % de ce quota. Tous les parcours utilisent 3 vies.</p></div></div>
 <?php if($message):?><div class="card" style="padding:1rem;margin-bottom:1rem;border-color:#2dd4bf"><strong><?=e_admin_modules($message)?></strong></div><?php endif;?>
 <?php if($error):?><div class="card" style="padding:1rem;margin-bottom:1rem;border-color:#fb7185"><strong><?=e_admin_modules($error)?></strong></div><?php endif;?>
 <?php foreach($modules as $module):
@@ -23,7 +23,7 @@ $isActive=(int)$module['active']===1;
 
 <h3 style="margin:1.4rem 0 .75rem">Niveaux du module</h3>
 <p style="color:var(--muted);margin-top:0">Les niveaux ne sont pas activés manuellement. <strong>Facile</strong> est disponible dès le départ, puis le badge Facile débloque Moyen, le badge Moyen débloque Difficile et le badge Difficile débloque Expert.</p>
-<div style="overflow:auto"><table class="table"><thead><tr><th>Niveau</th><th>Part du quota</th><th>Questions / tentative</th><th>Badge</th><th>Élèves avec badge</th></tr></thead><tbody>
+<div style="overflow:auto"><table class="table"><thead><tr><th>Niveau</th><th>Part du quota</th><th>Nombre de questions</th><th>Badge</th><th>Élèves avec badge</th></tr></thead><tbody>
 <?php foreach($paths as $path):
 $levelPercent=(int)$path['pool_percent'];
 $computedQuestions=max(1,(int)ceil($quotaTotal*($levelPercent/100)));
