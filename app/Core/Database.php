@@ -92,6 +92,50 @@ final class Database
                 ]);
             }
         }
+
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS path_badges (
+                id INTEGER PRIMARY KEY,
+                module_id INTEGER NOT NULL,
+                path_id INTEGER NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                description TEXT,
+                icon TEXT,
+                FOREIGN KEY(module_id) REFERENCES modules(id) ON DELETE CASCADE,
+                FOREIGN KEY(path_id) REFERENCES module_paths(id) ON DELETE CASCADE
+            )'
+        );
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS student_path_badges (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id INTEGER NOT NULL,
+                badge_id INTEGER NOT NULL,
+                attempt_id INTEGER,
+                obtained_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(student_id) REFERENCES students(id) ON DELETE CASCADE,
+                FOREIGN KEY(badge_id) REFERENCES path_badges(id) ON DELETE CASCADE,
+                FOREIGN KEY(attempt_id) REFERENCES attempts(id),
+                UNIQUE(student_id, badge_id)
+            )'
+        );
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_path_badges_module ON path_badges(module_id)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_student_path_badges_student ON student_path_badges(student_id)');
+
+        $badgeSeed = $pdo->prepare(
+            'INSERT OR IGNORE INTO path_badges(id,module_id,path_id,name,description,icon)
+             SELECT p.id,p.module_id,p.id,
+                    p.name || " — " || m.title,
+                    "Badge obtenu en terminant le niveau " || p.name || " du module " || m.title || ".",
+                    p.icon
+             FROM module_paths p
+             JOIN modules m ON m.id=p.module_id
+             WHERE p.id=:path_id'
+        );
+        foreach (array_keys($paths) as $moduleId) {
+            for ($level = 1; $level <= 4; $level++) {
+                $badgeSeed->execute(['path_id' => ($moduleId * 100) + $level]);
+            }
+        }
     }
 
     private static function initializeIfMissing(string $databasePath, string $schemaPath): void
