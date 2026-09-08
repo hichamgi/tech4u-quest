@@ -12,9 +12,9 @@ final class GameService
 
     public function modulesForStudent(int $studentId, bool $includeInactive = false): array
     {
-        $stmt=$this->db->prepare('SELECT m.id,m.title,m.description,m.icon,ms.question_count,ms.initial_lives,(SELECT COUNT(*) FROM questions q JOIN categories c2 ON c2.id=q.category_id WHERE c2.module_id=m.id AND q.active=1) AS bank_size,(SELECT MAX(a.score) FROM attempts a WHERE a.student_id=:student_best AND a.module_id=m.id) AS best_score,(SELECT a2.id FROM attempts a2 WHERE a2.student_id=:student_current AND a2.module_id=m.id AND a2.status="in_progress" ORDER BY a2.id DESC LIMIT 1) AS current_attempt_id,EXISTS(SELECT 1 FROM attempts ac WHERE ac.student_id=:student_completed AND ac.module_id=m.id AND ac.status="completed") AS completed,b.id AS badge_id,b.name AS badge_name,b.icon AS badge_icon,EXISTS(SELECT 1 FROM student_badges sb WHERE sb.student_id=:student_badge AND sb.badge_id=b.id) AS badge_obtained FROM modules m JOIN module_settings ms ON ms.module_id=m.id LEFT JOIN badges b ON b.module_id=m.id WHERE (m.active=1 OR CAST(:include_inactive AS INTEGER)=1) ORDER BY m.display_order,m.id');
+        $stmt=$this->db->prepare('SELECT m.id,m.title,m.description,m.icon,ms.question_count,ms.initial_lives,(SELECT COUNT(*) FROM questions q JOIN categories c2 ON c2.id=q.category_id WHERE c2.module_id=m.id AND q.active=1) AS bank_size,(SELECT MAX(a.score) FROM attempts a WHERE a.student_id=:student_best AND a.module_id=m.id) AS best_score,(SELECT a2.id FROM attempts a2 WHERE a2.student_id=:student_current AND a2.module_id=m.id AND a2.status="in_progress" ORDER BY a2.id DESC LIMIT 1) AS current_attempt_id,EXISTS(SELECT 1 FROM attempts ac WHERE ac.student_id=:student_completed AND ac.module_id=m.id AND ac.status="completed") AS completed FROM modules m JOIN module_settings ms ON ms.module_id=m.id WHERE (m.active=1 OR CAST(:include_inactive AS INTEGER)=1) ORDER BY m.display_order,m.id');
         $stmt->execute([
-            'student_best'=>$studentId,'student_current'=>$studentId,'student_completed'=>$studentId,'student_badge'=>$studentId,
+            'student_best'=>$studentId,'student_current'=>$studentId,'student_completed'=>$studentId,
             'include_inactive'=>$includeInactive?1:0,
         ]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -22,7 +22,7 @@ final class GameService
 
     public function module(int $moduleId, bool $includeInactive = false): array
     {
-        $stmt=$this->db->prepare('SELECT m.*,ms.question_count,ms.initial_lives,ms.badge_enabled,b.name AS badge_name,b.description AS badge_description,b.icon AS badge_icon FROM modules m JOIN module_settings ms ON ms.module_id=m.id LEFT JOIN badges b ON b.module_id=m.id WHERE m.id=:id AND (m.active=1 OR CAST(:include_inactive AS INTEGER)=1)');
+        $stmt=$this->db->prepare('SELECT m.*,ms.question_count,ms.initial_lives,ms.badge_enabled FROM modules m JOIN module_settings ms ON ms.module_id=m.id WHERE m.id=:id AND (m.active=1 OR CAST(:include_inactive AS INTEGER)=1)');
         $stmt->execute(['id'=>$moduleId,'include_inactive'=>$includeInactive?1:0]);
         $module=$stmt->fetch(PDO::FETCH_ASSOC);
         if(!$module) throw new RuntimeException('Module introuvable.');
@@ -36,17 +36,21 @@ final class GameService
     public function pathsForStudent(int $moduleId, int $studentId, bool $isDemo = false): array
     {
         $stmt=$this->db->prepare('SELECT p.*,
+            pb.id AS badge_id,pb.name AS badge_name,pb.icon AS badge_icon,pb.description AS badge_description,
+            EXISTS(SELECT 1 FROM student_path_badges spb WHERE spb.student_id=:student_badge AND spb.badge_id=pb.id) AS badge_obtained,
             EXISTS(SELECT 1 FROM attempts a WHERE a.student_id=:student_completed AND a.path_id=p.id AND a.status="completed") AS completed,
             (SELECT a2.id FROM attempts a2 WHERE a2.student_id=:student_current AND a2.path_id=p.id AND a2.status="in_progress" ORDER BY a2.id DESC LIMIT 1) AS current_attempt_id
-            FROM module_paths p WHERE p.module_id=:module AND p.active=1 ORDER BY p.display_order,p.id');
-        $stmt->execute(['student_completed'=>$studentId,'student_current'=>$studentId,'module'=>$moduleId]);
+            FROM module_paths p
+            LEFT JOIN path_badges pb ON pb.path_id=p.id
+            WHERE p.module_id=:module AND p.active=1
+            ORDER BY p.display_order,p.id');
+        $stmt->execute(['student_badge'=>$studentId,'student_completed'=>$studentId,'student_current'=>$studentId,'module'=>$moduleId]);
         $paths=$stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $previousCompleted=true;
+        $previousBadge=true;
         foreach($paths as &$path){
-            $completed=(int)$path['completed']===1;
-            $path['unlocked']=$isDemo || (int)$path['display_order']===1 || $previousCompleted;
-            $previousCompleted=$completed;
+            $path['unlocked']=$isDemo || (int)$path['display_order']===1 || $previousBadge;
+            $previousBadge=(int)($path['badge_obtained']??0)===1;
         }
         unset($path);
         return $paths;
@@ -57,7 +61,7 @@ final class GameService
         $this->module($moduleId,$includeInactive);
         $path=$this->path($pathId,$moduleId);
         if(!$this->pathUnlocked($studentId,$path,$isDemo)) {
-            throw new RuntimeException('Ce parcours est verrouillé. Termine le parcours précédent pour le débloquer.');
+            throw new RuntimeException('Ce niveau est verrouillé. Obtiens d’abord le badge du niveau précédent.');
         }
 
         $stmt=$this->db->prepare('SELECT id FROM attempts WHERE student_id=:student AND module_id=:module AND path_id=:path AND status="in_progress" ORDER BY id DESC LIMIT 1');
@@ -87,7 +91,7 @@ final class GameService
         $stmt->execute(['module'=>$path['module_id'],'ord'=>$path['display_order']]);
         $previousId=$stmt->fetchColumn();
         if($previousId===false) return true;
-        $done=$this->db->prepare('SELECT 1 FROM attempts WHERE student_id=:student AND path_id=:path AND status="completed" LIMIT 1');
+        $done=$this->db->prepare('SELECT 1 FROM student_path_badges spb JOIN path_badges pb ON pb.id=spb.badge_id WHERE spb.student_id=:student AND pb.path_id=:path LIMIT 1');
         $done->execute(['student'=>$studentId,'path'=>(int)$previousId]);
         return $done->fetchColumn()!==false;
     }
@@ -234,7 +238,7 @@ final class GameService
 
     public function attempt(int $attemptId,int $studentId): array
     {
-        $stmt=$this->db->prepare('SELECT a.*,m.title AS module_title,m.icon AS module_icon,p.code AS path_code,p.name AS path_name,p.icon AS path_icon,b.name AS badge_name,b.icon AS badge_icon FROM attempts a JOIN modules m ON m.id=a.module_id LEFT JOIN module_paths p ON p.id=a.path_id LEFT JOIN badges b ON b.module_id=m.id WHERE a.id=:id AND a.student_id=:student');
+        $stmt=$this->db->prepare('SELECT a.*,m.title AS module_title,m.icon AS module_icon,p.code AS path_code,p.name AS path_name,p.icon AS path_icon,pb.name AS badge_name,pb.icon AS badge_icon FROM attempts a JOIN modules m ON m.id=a.module_id LEFT JOIN module_paths p ON p.id=a.path_id LEFT JOIN path_badges pb ON pb.path_id=p.id WHERE a.id=:id AND a.student_id=:student');
         $stmt->execute(['id'=>$attemptId,'student'=>$studentId]);
         $attempt=$stmt->fetch(PDO::FETCH_ASSOC);if(!$attempt)throw new RuntimeException('Tentative introuvable.');return $attempt;
     }
@@ -264,7 +268,7 @@ final class GameService
                 $newScore=(int)$attempt['score']+1;$position=(int)$attempt['current_position'];$total=(int)$attempt['total_questions'];
                 if($position>=$total){
                     $this->db->prepare('UPDATE attempts SET score=:score,status="completed",finished_at=CURRENT_TIMESTAMP WHERE id=:id')->execute(['score'=>$newScore,'id'=>$attemptId]);
-                    if((string)($attempt['path_code']??'')==='expert') $this->awardBadge($studentId,(int)$attempt['module_id'],$attemptId);
+                    $this->awardPathBadge($studentId,(int)$attempt['path_id'],$attemptId);
                     $this->db->commit();return['correct'=>true,'status'=>'completed','attempt_id'=>$attemptId];
                 }
                 $this->db->prepare('UPDATE attempts SET score=:score,current_position=current_position+1 WHERE id=:id')->execute(['score'=>$newScore,'id'=>$attemptId]);
@@ -277,8 +281,13 @@ final class GameService
         }catch(\Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
     }
 
-    private function awardBadge(int $studentId,int $moduleId,int $attemptId): void
+    private function awardPathBadge(int $studentId,int $pathId,int $attemptId): void
     {
-        $stmt=$this->db->prepare('SELECT b.id FROM badges b JOIN module_settings ms ON ms.module_id=b.module_id WHERE b.module_id=:module AND ms.badge_enabled=1 LIMIT 1');$stmt->execute(['module'=>$moduleId]);$badgeId=$stmt->fetchColumn();if($badgeId===false)return;$insert=$this->db->prepare('INSERT OR IGNORE INTO student_badges(student_id,badge_id,attempt_id) VALUES(:student,:badge,:attempt)');$insert->execute(['student'=>$studentId,'badge'=>(int)$badgeId,'attempt'=>$attemptId]);
+        $stmt=$this->db->prepare('SELECT id FROM path_badges WHERE path_id=:path LIMIT 1');
+        $stmt->execute(['path'=>$pathId]);
+        $badgeId=$stmt->fetchColumn();
+        if($badgeId===false)return;
+        $insert=$this->db->prepare('INSERT OR IGNORE INTO student_path_badges(student_id,badge_id,attempt_id) VALUES(:student,:badge,:attempt)');
+        $insert->execute(['student'=>$studentId,'badge'=>(int)$badgeId,'attempt'=>$attemptId]);
     }
 }
