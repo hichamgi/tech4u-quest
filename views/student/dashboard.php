@@ -23,7 +23,7 @@ function e(string $value): string
 <nav class="nav-links"><a class="nav-link active" href="<?= e(Url::to('dashboard')) ?>">Mes quêtes</a><a class="nav-link" href="#badges">Badges</a><a class="btn btn-secondary" href="<?= e(Url::to('logout')) ?>">Déconnexion</a></nav>
 </div></header>
 <main class="container page">
-<div class="page-head"><div><span class="eyebrow">⚔️ TABLEAU DE BORD ÉLÈVE</span><h1>Bonjour <?= e((string)$student['login']) ?> 👋</h1><p>Choisis un module. Ta progression, tes scores et tes badges sont enregistrés automatiquement.</p></div><div class="chip">🏆 <?= (int)$badgeCount ?> badge<?= (int)$badgeCount > 1 ? 's' : '' ?></div></div>
+<div class="page-head"><div><span class="eyebrow">⚔️ TABLEAU DE BORD ÉLÈVE</span><h1>Bonjour <?= e((string)$student['login']) ?> 👋</h1><p>Choisis un module. Commence par le mode Facile puis débloque les niveaux suivants grâce aux badges.</p></div><div class="chip">🏆 <?= (int)$badgeCount ?> badge<?= (int)$badgeCount > 1 ? 's' : '' ?></div></div>
 
 <section class="grid module-grid">
 <?php foreach ($modules as $m):
@@ -44,8 +44,8 @@ $status = $completed ? 'Terminé' : ($resume ? 'En cours' : ($available ? 'À co
 <?php endforeach; ?>
 </section>
 
-<section id="badges" style="margin-top:2rem"><div class="page-head"><div><span class="eyebrow">🏆 RÉCOMPENSES</span><h2>Mes badges</h2></div></div><div class="grid module-grid">
-<?php if (!$badges): ?><div class="card card-pad"><p>Aucun badge pour le moment. Termine un module pour débloquer le premier.</p></div><?php endif; ?>
+<section id="badges" style="margin-top:2rem"><div class="page-head"><div><span class="eyebrow">🏆 RÉCOMPENSES</span><h2>Mes badges</h2><p>Chaque module possède quatre badges : Facile, Moyen, Difficile et Expert.</p></div></div><div class="grid module-grid">
+<?php if (!$badges): ?><div class="card card-pad"><p>Aucun badge pour le moment. Termine le mode Facile d’un module pour obtenir le premier.</p></div><?php endif; ?>
 <?php foreach ($badges as $b): ?><article class="card module-card"><div class="module-icon"><?= e((string)($b['icon'] ?: '🏆')) ?></div><h3><?= e((string)$b['name']) ?></h3><p><?= e((string)($b['description'] ?? '')) ?></p><small><?= e((string)$b['module_title']) ?> · obtenu le <?= e(DateFormatter::human((string)$b['obtained_at'])) ?></small></article><?php endforeach; ?>
 </div></section>
 </main>
