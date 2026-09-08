@@ -28,17 +28,18 @@ final class StudentController
         $isDemo = $this->isDemoStudent($db, (int)$student['id']);
         $modules = $game->modulesForStudent((int)$student['id'], $isDemo);
 
-        $badgeCountStmt = $db->prepare('SELECT COUNT(*) FROM student_badges WHERE student_id=:student');
+        $badgeCountStmt = $db->prepare('SELECT COUNT(*) FROM student_path_badges WHERE student_id=:student');
         $badgeCountStmt->execute(['student' => $student['id']]);
         $badgeCount = (int)$badgeCountStmt->fetchColumn();
 
         $badgesStmt = $db->prepare(
-            'SELECT b.icon,b.name,b.description,sb.obtained_at,m.title AS module_title
-             FROM student_badges sb
-             JOIN badges b ON b.id=sb.badge_id
-             JOIN modules m ON m.id=b.module_id
-             WHERE sb.student_id=:student
-             ORDER BY sb.obtained_at DESC'
+            'SELECT pb.icon,pb.name,pb.description,spb.obtained_at,m.title AS module_title,p.name AS path_name
+             FROM student_path_badges spb
+             JOIN path_badges pb ON pb.id=spb.badge_id
+             JOIN module_paths p ON p.id=pb.path_id
+             JOIN modules m ON m.id=pb.module_id
+             WHERE spb.student_id=:student
+             ORDER BY spb.obtained_at DESC, p.display_order DESC'
         );
         $badgesStmt->execute(['student' => $student['id']]);
         $badges = $badgesStmt->fetchAll(PDO::FETCH_ASSOC);
