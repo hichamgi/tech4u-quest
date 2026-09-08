@@ -201,16 +201,17 @@ final class GameService
         $all=$stmt->fetchAll(PDO::FETCH_ASSOC);
         if(!$all){if(!$required)return null;throw new RuntimeException("Aucune question active dans la catégorie {$categoryId}.");}
 
-        $poolSize=max(1,(int)ceil(count($all)*((int)$path['pool_percent']/100)));
-        $pool=array_slice($all,0,$poolSize);
+        // Tous les niveaux utilisent toute la banque active de la catégorie.
+        // La différence entre les niveaux vient du nombre de questions à tirer
+        // et de la pondération de difficulté, pas d'un sous-ensemble arbitraire de la banque.
         $excludeIds=array_flip(array_map('intval',$exclude));
         $excludeGroups=array_flip(array_map('strval',$excludedGroups));
-        $eligible=array_values(array_filter($pool,static function(array $q) use($excludeIds,$excludeGroups):bool{
+        $eligible=array_values(array_filter($all,static function(array $q) use($excludeIds,$excludeGroups):bool{
             if(isset($excludeIds[(int)$q['id']])) return false;
             $g=trim((string)($q['exclusion_group']??''));
             return $g==='' || !isset($excludeGroups[$g]);
         }));
-        if(!$eligible){if(!$required)return null;throw new RuntimeException("Le pool du parcours est insuffisant dans la catégorie {$categoryId}. Augmente la banque ou ajuste les exclusions.");}
+        if(!$eligible){if(!$required)return null;throw new RuntimeException("La banque du parcours est insuffisante dans la catégorie {$categoryId}. Augmente la banque ou ajuste les exclusions.");}
 
         $weights=$this->difficultyWeights((string)$path['code']);
         $weighted=[];$total=0;
