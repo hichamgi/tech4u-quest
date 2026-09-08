@@ -23,12 +23,10 @@ $isActive=(int)$module['active']===1;
 
 <h3 style="margin:1.4rem 0 .75rem">Niveaux du module</h3>
 <p style="color:var(--muted);margin-top:0">Les niveaux ne sont pas activés manuellement. <strong>Facile</strong> est disponible dès le départ, puis le badge Facile débloque Moyen, le badge Moyen débloque Difficile et le badge Difficile débloque Expert.</p>
-<div style="overflow:auto"><table class="table"><thead><tr><th>Niveau</th><th>Part du quota</th><th>Questions / tentative</th><th>Badge</th><th>Élèves avec badge</th><th>Déblocage</th></tr></thead><tbody>
+<div style="overflow:auto"><table class="table"><thead><tr><th>Niveau</th><th>Part du quota</th><th>Questions / tentative</th><th>Badge</th><th>Élèves avec badge</th></tr></thead><tbody>
 <?php foreach($paths as $path):
 $levelPercent=(int)$path['pool_percent'];
 $computedQuestions=max(1,(int)ceil($quotaTotal*($levelPercent/100)));
-$order=(int)$path['display_order'];
-$unlockText=match($order){1=>'Disponible au départ',2=>'Après badge Facile',3=>'Après badge Moyen',4=>'Après badge Difficile',default=>'Automatique'};
 ?>
 <tr>
 <td><strong><?=e_admin_modules((string)($path['icon']?:'🎯'))?> <?=e_admin_modules((string)$path['name'])?></strong><br><small><?=e_admin_modules((string)($path['description']??''))?></small></td>
@@ -36,7 +34,6 @@ $unlockText=match($order){1=>'Disponible au départ',2=>'Après badge Facile',3=
 <td><strong class="level-question-count" data-percent="<?= $levelPercent ?>"><?= $computedQuestions ?></strong></td>
 <td><?=e_admin_modules((string)($path['badge_icon']?:$path['icon']?:'🏅'))?> <?=e_admin_modules((string)($path['badge_name']??('Badge '.$path['name'])))?></td>
 <td><?= (int)($path['badge_holders']??0)?></td>
-<td><span class="chip"><?= e_admin_modules($unlockText) ?></span></td>
 </tr>
 <?php endforeach;?>
 </tbody></table></div>
