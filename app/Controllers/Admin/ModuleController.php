@@ -33,9 +33,6 @@ final class ModuleController
                     $categoryCounts = $_POST['category_count'] ?? [];
                     if (!is_array($categoryCounts)) throw new RuntimeException('Quotas de catégories invalides.');
 
-                    $pathActive = $_POST['path_active'] ?? [];
-                    if (!is_array($pathActive)) throw new RuntimeException('Configuration des niveaux invalide.');
-
                     $db->beginTransaction();
                     $quotaSum = 0;
                     foreach ($categoryCounts as $categoryId => $count) {
@@ -61,23 +58,17 @@ final class ModuleController
                     if (count($modulePaths) !== 4) throw new RuntimeException('Les quatre niveaux du module ne sont pas disponibles.');
 
                     $levelPercents = [1=>25,2=>50,3=>75,4=>100];
-                    $updatePath = $db->prepare('UPDATE module_paths SET question_count=:count,pool_percent=:percent,active=:active WHERE id=:id AND module_id=:module');
+                    $updatePath = $db->prepare('UPDATE module_paths SET question_count=:count,pool_percent=:percent,active=1 WHERE id=:id AND module_id=:module');
                     foreach ($modulePaths as $path) {
                         $pathId = (int)$path['id'];
                         $order = (int)$path['display_order'];
                         $percent = $levelPercents[$order] ?? null;
                         if ($percent === null) throw new RuntimeException('Ordre de niveau invalide.');
 
-                        // Expert = quota pédagogique complet. Les autres niveaux sont une fraction
-                        // croissante de ce quota, arrondie au supérieur.
                         $questionCount = max(1, (int)ceil($quotaSum * ($percent / 100)));
-                        $active = isset($pathActive[$pathId]) ? 1 : 0;
-                        if ($order === 1) $active = 1;
-
                         $updatePath->execute([
                             'count'=>$questionCount,
                             'percent'=>$percent,
-                            'active'=>$active,
                             'id'=>$pathId,
                             'module'=>$moduleId,
                         ]);
@@ -90,7 +81,7 @@ final class ModuleController
                     $stmt->execute(['active'=>$moduleActive,'id'=>$moduleId]);
 
                     $db->commit();
-                    $message = 'Configuration enregistrée. Expert utilise les '.$quotaSum.' questions du quota pédagogique ; Facile, Moyen et Difficile utilisent automatiquement 25 %, 50 % et 75 % de ce quota.';
+                    $message = 'Configuration enregistrée. Les niveaux sont gérés automatiquement : Facile est disponible au départ, puis chaque badge débloque le niveau suivant.';
                 } catch (Throwable $e) {
                     if ($db->inTransaction()) $db->rollBack();
                     $error = $e->getMessage();
@@ -124,7 +115,7 @@ final class ModuleController
         );
 
         $pathsStmt = $db->prepare(
-            'SELECT p.id,p.code,p.name,p.icon,p.description,p.pool_percent,p.question_count,p.display_order,p.active,
+            'SELECT p.id,p.code,p.name,p.icon,p.description,p.pool_percent,p.question_count,p.display_order,
                     pb.name AS badge_name,pb.icon AS badge_icon,
                     COUNT(DISTINCT spb.student_id) AS badge_holders
              FROM module_paths p
