@@ -81,7 +81,7 @@ final class ModuleController
                     $stmt->execute(['active'=>$moduleActive,'id'=>$moduleId]);
 
                     $db->commit();
-                    $message = 'Configuration enregistrée. Les niveaux sont gérés automatiquement : Facile est disponible au départ, puis chaque badge débloque le niveau suivant.';
+                    $message = 'Configuration enregistrée.';
                 } catch (Throwable $e) {
                     if ($db->inTransaction()) $db->rollBack();
                     $error = $e->getMessage();
