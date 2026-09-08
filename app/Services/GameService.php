@@ -42,7 +42,7 @@ final class GameService
             (SELECT a2.id FROM attempts a2 WHERE a2.student_id=:student_current AND a2.path_id=p.id AND a2.status="in_progress" ORDER BY a2.id DESC LIMIT 1) AS current_attempt_id
             FROM module_paths p
             LEFT JOIN path_badges pb ON pb.path_id=p.id
-            WHERE p.module_id=:module AND p.active=1
+            WHERE p.module_id=:module
             ORDER BY p.display_order,p.id');
         $stmt->execute(['student_badge'=>$studentId,'student_completed'=>$studentId,'student_current'=>$studentId,'module'=>$moduleId]);
         $paths=$stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -77,7 +77,7 @@ final class GameService
 
     private function path(int $pathId,int $moduleId): array
     {
-        $stmt=$this->db->prepare('SELECT * FROM module_paths WHERE id=:id AND module_id=:module AND active=1');
+        $stmt=$this->db->prepare('SELECT * FROM module_paths WHERE id=:id AND module_id=:module');
         $stmt->execute(['id'=>$pathId,'module'=>$moduleId]);
         $path=$stmt->fetch(PDO::FETCH_ASSOC);
         if(!$path) throw new RuntimeException('Parcours introuvable.');
@@ -87,7 +87,7 @@ final class GameService
     private function pathUnlocked(int $studentId,array $path,bool $isDemo): bool
     {
         if($isDemo || (int)$path['display_order']===1) return true;
-        $stmt=$this->db->prepare('SELECT id FROM module_paths WHERE module_id=:module AND active=1 AND display_order<:ord ORDER BY display_order DESC LIMIT 1');
+        $stmt=$this->db->prepare('SELECT id FROM module_paths WHERE module_id=:module AND display_order<:ord ORDER BY display_order DESC LIMIT 1');
         $stmt->execute(['module'=>$path['module_id'],'ord'=>$path['display_order']]);
         $previousId=$stmt->fetchColumn();
         if($previousId===false) return true;
