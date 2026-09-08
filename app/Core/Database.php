@@ -61,29 +61,38 @@ final class Database
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_attempts_path ON attempts(path_id)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_module_paths_module ON module_paths(module_id)');
 
-        $paths = [
-            1 => [6, 8, 10, 12],
-            2 => [8, 10, 12, 15],
-            3 => [8, 12, 15, 20],
-            4 => [7, 10, 12, 15],
-        ];
         $defs = [
             ['discovery', 'Facile', '🟢', 'Commence avec les notions essentielles et les questions les plus accessibles.', 25, 1],
-            ['training', 'Moyen', '🔵', 'Progresse avec une plus grande partie de la banque et des questions plus variées.', 50, 2],
-            ['mastery', 'Difficile', '🟠', 'Consolide tes acquis avec un parcours plus exigeant.', 75, 3],
-            ['expert', 'Expert', '🔴', 'Relève le défi complet avec toute la banque de questions.', 100, 4],
+            ['training', 'Moyen', '🔵', 'Progresse avec davantage de questions et une difficulté plus variée.', 50, 2],
+            ['mastery', 'Difficile', '🟠', 'Consolide tes acquis avec davantage de questions et un niveau plus exigeant.', 75, 3],
+            ['expert', 'Expert', '🔴', 'Relève le défi complet défini par la répartition pédagogique du module.', 100, 4],
         ];
+
+        $moduleIds = $pdo->query('SELECT id FROM modules ORDER BY id')->fetchAll(PDO::FETCH_COLUMN);
+        $quotaStmt = $pdo->prepare('SELECT COALESCE(SUM(question_count),0) FROM module_category_settings WHERE module_id=:module');
         $insert = $pdo->prepare(
             'INSERT OR IGNORE INTO module_paths(id,module_id,code,name,icon,description,pool_percent,question_count,display_order,active)
-             VALUES(:id,:module,:code,:name,:icon,:description,:pool,:count,:ord,1)'
+             VALUES(:id,:module,:code,:name,:icon,:description,:percent,:count,:ord,1)'
         );
         $update = $pdo->prepare(
             'UPDATE module_paths
-             SET name=:name,icon=:icon,description=:description,pool_percent=:pool,question_count=:count,display_order=:ord
+             SET name=:name,icon=:icon,description=:description,pool_percent=:percent,question_count=:count,display_order=:ord
              WHERE id=:id AND module_id=:module AND code=:code'
         );
-        foreach ($paths as $moduleId => $counts) {
+
+        foreach ($moduleIds as $moduleIdRaw) {
+            $moduleId = (int)$moduleIdRaw;
+            $quotaStmt->execute(['module'=>$moduleId]);
+            $quotaTotal = (int)$quotaStmt->fetchColumn();
+            if ($quotaTotal < 1) {
+                $fallback = $pdo->prepare('SELECT question_count FROM module_settings WHERE module_id=:module');
+                $fallback->execute(['module'=>$moduleId]);
+                $quotaTotal = max(1, (int)$fallback->fetchColumn());
+            }
+
             foreach ($defs as $i => $def) {
+                $percent = (int)$def[4];
+                $count = max(1, (int)ceil($quotaTotal * ($percent / 100)));
                 $params = [
                     'id' => ($moduleId * 100) + ($i + 1),
                     'module' => $moduleId,
@@ -91,13 +100,16 @@ final class Database
                     'name' => $def[1],
                     'icon' => $def[2],
                     'description' => $def[3],
-                    'pool' => $def[4],
-                    'count' => $counts[$i],
+                    'percent' => $percent,
+                    'count' => $count,
                     'ord' => $def[5],
                 ];
                 $insert->execute($params);
                 $update->execute($params);
             }
+
+            $syncSettings = $pdo->prepare('UPDATE module_settings SET question_count=:count,initial_lives=3 WHERE module_id=:module');
+            $syncSettings->execute(['count'=>$quotaTotal,'module'=>$moduleId]);
         }
 
         $pdo->exec(
@@ -145,7 +157,8 @@ final class Database
                  icon=(SELECT p.icon FROM module_paths p WHERE p.id=:path_id)
              WHERE path_id=:path_id'
         );
-        foreach (array_keys($paths) as $moduleId) {
+        foreach ($moduleIds as $moduleIdRaw) {
+            $moduleId = (int)$moduleIdRaw;
             for ($level = 1; $level <= 4; $level++) {
                 $pathId = ($moduleId * 100) + $level;
                 $badgeSeed->execute(['path_id' => $pathId]);
