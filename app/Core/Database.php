@@ -68,18 +68,23 @@ final class Database
             4 => [7, 10, 12, 15],
         ];
         $defs = [
-            ['discovery', 'Découverte', '🟢', 'Découvre les notions essentielles avec les questions les plus accessibles.', 25, 1],
-            ['training', 'Entraînement', '🔵', 'Élargis ton entraînement avec une plus grande partie de la banque.', 50, 2],
-            ['mastery', 'Maîtrise', '🟠', 'Consolide tes acquis avec un parcours plus exigeant.', 75, 3],
+            ['discovery', 'Facile', '🟢', 'Commence avec les notions essentielles et les questions les plus accessibles.', 25, 1],
+            ['training', 'Moyen', '🔵', 'Progresse avec une plus grande partie de la banque et des questions plus variées.', 50, 2],
+            ['mastery', 'Difficile', '🟠', 'Consolide tes acquis avec un parcours plus exigeant.', 75, 3],
             ['expert', 'Expert', '🔴', 'Relève le défi complet avec toute la banque de questions.', 100, 4],
         ];
         $insert = $pdo->prepare(
             'INSERT OR IGNORE INTO module_paths(id,module_id,code,name,icon,description,pool_percent,question_count,display_order,active)
              VALUES(:id,:module,:code,:name,:icon,:description,:pool,:count,:ord,1)'
         );
+        $update = $pdo->prepare(
+            'UPDATE module_paths
+             SET name=:name,icon=:icon,description=:description,pool_percent=:pool,question_count=:count,display_order=:ord
+             WHERE id=:id AND module_id=:module AND code=:code'
+        );
         foreach ($paths as $moduleId => $counts) {
             foreach ($defs as $i => $def) {
-                $insert->execute([
+                $params = [
                     'id' => ($moduleId * 100) + ($i + 1),
                     'module' => $moduleId,
                     'code' => $def[0],
@@ -89,7 +94,9 @@ final class Database
                     'pool' => $def[4],
                     'count' => $counts[$i],
                     'ord' => $def[5],
-                ]);
+                ];
+                $insert->execute($params);
+                $update->execute($params);
             }
         }
 
@@ -125,15 +132,24 @@ final class Database
             'INSERT OR IGNORE INTO path_badges(id,module_id,path_id,name,description,icon)
              SELECT p.id,p.module_id,p.id,
                     p.name || " — " || m.title,
-                    "Badge obtenu en terminant le niveau " || p.name || " du module " || m.title || ".",
+                    "Badge obtenu en terminant le mode " || p.name || " du module " || m.title || ".",
                     p.icon
              FROM module_paths p
              JOIN modules m ON m.id=p.module_id
              WHERE p.id=:path_id'
         );
+        $badgeUpdate = $pdo->prepare(
+            'UPDATE path_badges
+             SET name=(SELECT p.name || " — " || m.title FROM module_paths p JOIN modules m ON m.id=p.module_id WHERE p.id=:path_id),
+                 description=(SELECT "Badge obtenu en terminant le mode " || p.name || " du module " || m.title || "." FROM module_paths p JOIN modules m ON m.id=p.module_id WHERE p.id=:path_id),
+                 icon=(SELECT p.icon FROM module_paths p WHERE p.id=:path_id)
+             WHERE path_id=:path_id'
+        );
         foreach (array_keys($paths) as $moduleId) {
             for ($level = 1; $level <= 4; $level++) {
-                $badgeSeed->execute(['path_id' => ($moduleId * 100) + $level]);
+                $pathId = ($moduleId * 100) + $level;
+                $badgeSeed->execute(['path_id' => $pathId]);
+                $badgeUpdate->execute(['path_id' => $pathId]);
             }
         }
     }
