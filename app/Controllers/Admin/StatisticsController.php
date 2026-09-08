@@ -68,8 +68,8 @@ final class StatisticsController
 
         $pathStats = $db->query(
             "SELECT p.code,p.name,p.icon,p.pool_percent,p.display_order,
-                    COUNT(a.id) AS attempts,
-                    COUNT(CASE WHEN a.status='completed' THEN 1 END) AS completed,
+                    COUNT(DISTINCT a.id) AS attempts,
+                    COUNT(DISTINCT CASE WHEN a.status='completed' THEN a.id END) AS completed,
                     COUNT(DISTINCT CASE WHEN a.status='completed' THEN a.student_id END) AS students_completed,
                     COUNT(DISTINCT CASE WHEN sb_student.id IS NOT NULL THEN spb.student_id END) AS badge_holders
              FROM module_paths p
