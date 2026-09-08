@@ -33,6 +33,13 @@ final class ModuleController
                     $categoryCounts = $_POST['category_count'] ?? [];
                     if (!is_array($categoryCounts)) throw new RuntimeException('Quotas de catégories invalides.');
 
+                    $pathCounts = $_POST['path_question_count'] ?? [];
+                    $pathPools = $_POST['path_pool_percent'] ?? [];
+                    $pathActive = $_POST['path_active'] ?? [];
+                    if (!is_array($pathCounts) || !is_array($pathPools) || !is_array($pathActive)) {
+                        throw new RuntimeException('Configuration des niveaux invalide.');
+                    }
+
                     $db->beginTransaction();
                     $quotaSum = 0;
                     foreach ($categoryCounts as $categoryId => $count) {
@@ -47,12 +54,31 @@ final class ModuleController
                         $quotaSum += $count;
                     }
                     if ($quotaSum < 1 || $quotaSum > 100) throw new RuntimeException('La somme des quotas doit être comprise entre 1 et 100 questions.');
+
+                    $pathsStmt = $db->prepare('SELECT id,display_order FROM module_paths WHERE module_id=:module ORDER BY display_order,id');
+                    $pathsStmt->execute(['module'=>$moduleId]);
+                    $modulePaths = $pathsStmt->fetchAll(PDO::FETCH_ASSOC);
+                    if (count($modulePaths) !== 4) throw new RuntimeException('Les quatre niveaux du module ne sont pas disponibles.');
+
+                    $updatePath = $db->prepare('UPDATE module_paths SET question_count=:count,pool_percent=:pool,active=:active WHERE id=:id AND module_id=:module');
+                    foreach ($modulePaths as $path) {
+                        $pathId = (int)$path['id'];
+                        $count = filter_var($pathCounts[$pathId] ?? null, FILTER_VALIDATE_INT, ['options'=>['min_range'=>1,'max_range'=>100]]);
+                        $pool = filter_var($pathPools[$pathId] ?? null, FILTER_VALIDATE_INT, ['options'=>['min_range'=>1,'max_range'=>100]]);
+                        $active = isset($pathActive[$pathId]) ? 1 : 0;
+                        if ($count === false || $pool === false) throw new RuntimeException('Paramètres invalides pour un niveau.');
+                        if ((int)$path['display_order'] === 1 && $active !== 1) {
+                            throw new RuntimeException('Le niveau Facile doit rester actif lorsqu’un module est utilisé.');
+                        }
+                        $updatePath->execute(['count'=>$count,'pool'=>$pool,'active'=>$active,'id'=>$pathId,'module'=>$moduleId]);
+                    }
+
                     $stmt = $db->prepare('UPDATE module_settings SET question_count=:q,initial_lives=:l,badge_enabled=:b WHERE module_id=:m');
                     $stmt->execute(['q'=>$quotaSum,'l'=>$initialLives,'b'=>$badgeEnabled,'m'=>$moduleId]);
                     $stmt = $db->prepare('UPDATE modules SET active=:active WHERE id=:id');
                     $stmt->execute(['active'=>$moduleActive,'id'=>$moduleId]);
                     $db->commit();
-                    $message = 'Configuration enregistrée. Questions par tentative : '.$quotaSum.'. Module '.($moduleActive?'activé':'désactivé').' pour les élèves.';
+                    $message = 'Configuration enregistrée. Les quatre niveaux et leurs badges sont pris en compte.';
                 } catch (Throwable $e) {
                     if ($db->inTransaction()) $db->rollBack();
                     $error = $e->getMessage();
@@ -64,13 +90,11 @@ final class ModuleController
             'SELECT m.id,m.title,m.description,m.icon,m.recommended_bank_size,m.active,
                     ms.question_count,ms.initial_lives,ms.badge_enabled,
                     COUNT(DISTINCT c.id) category_total,
-                    COUNT(DISTINCT CASE WHEN q.active=1 THEN q.id END) active_questions,
-                    b.name badge_name,b.icon badge_icon
+                    COUNT(DISTINCT CASE WHEN q.active=1 THEN q.id END) active_questions
              FROM modules m
              LEFT JOIN module_settings ms ON ms.module_id=m.id
              LEFT JOIN categories c ON c.module_id=m.id AND c.active=1
              LEFT JOIN questions q ON q.category_id=c.id
-             LEFT JOIN badges b ON b.module_id=m.id
              GROUP BY m.id
              ORDER BY m.display_order,m.id'
         )->fetchAll(PDO::FETCH_ASSOC);
@@ -85,9 +109,22 @@ final class ModuleController
              GROUP BY c.id
              ORDER BY c.display_order,c.id'
         );
+        $pathsStmt = $db->prepare(
+            'SELECT p.id,p.code,p.name,p.icon,p.description,p.pool_percent,p.question_count,p.display_order,p.active,
+                    pb.name AS badge_name,pb.icon AS badge_icon,
+                    COUNT(DISTINCT spb.student_id) AS badge_holders
+             FROM module_paths p
+             LEFT JOIN path_badges pb ON pb.path_id=p.id
+             LEFT JOIN student_path_badges spb ON spb.badge_id=pb.id
+             WHERE p.module_id=:module_id
+             GROUP BY p.id
+             ORDER BY p.display_order,p.id'
+        );
         foreach ($modules as &$module) {
             $categoriesStmt->execute(['module_id'=>$module['id']]);
             $module['categories'] = $categoriesStmt->fetchAll(PDO::FETCH_ASSOC);
+            $pathsStmt->execute(['module_id'=>$module['id']]);
+            $module['paths'] = $pathsStmt->fetchAll(PDO::FETCH_ASSOC);
         }
         unset($module);
         View::render('admin/modules', compact('modules','message','error'));
