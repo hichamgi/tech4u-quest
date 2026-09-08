@@ -22,6 +22,17 @@ $modeLabels = [
 <title>Module — Tech4U-QUEST</title>
 <link rel="icon" type="image/png" href="<?= e(Url::asset('images/icon.png')) ?>">
 <link rel="stylesheet" href="<?= e(Url::asset('css/app.css')) ?>">
+<style>
+.module-lives{white-space:nowrap;display:inline-flex;align-items:center;flex-shrink:0}
+.mode-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem;align-items:stretch}
+.mode-card{padding:1.15rem;display:flex;flex-direction:column;height:100%}
+.mode-title{display:flex;align-items:center;gap:.5rem;white-space:nowrap;margin-bottom:.25rem}
+.mode-title .mode-icon{font-size:1.8rem;line-height:1}
+.mode-title h3{margin:0;white-space:nowrap}
+.mode-description{color:var(--muted);min-height:3.5em}
+.mode-footer{margin-top:auto;padding-top:.75rem}
+.mode-footer form{margin:0}
+</style>
 </head>
 <body>
 <header class="site-header"><div class="container nav"><a class="brand" href="<?= e(Url::to('dashboard')) ?>"><span class="brand-mark">⚡</span><span>Tech4U <b>QUEST</b></span></a><div class="nav-links"><a class="nav-link" href="<?= e(Url::to('dashboard')) ?>">← Mes quêtes</a></div></div></header>
@@ -29,7 +40,7 @@ $modeLabels = [
 <?php if ($error): ?>
 <div class="card card-pad" style="border-color:#fb7185"><strong><?= e((string)$error) ?></strong><div style="margin-top:1rem"><a class="btn btn-secondary" href="<?= e(Url::to('dashboard')) ?>">Retour</a></div></div>
 <?php elseif ($module): ?>
-<div class="page-head"><div><span class="eyebrow"><?= e((string)($module['icon'] ?: '📘')) ?> MODULE <?= (int)$module['id'] ?></span><h1><?= e((string)$module['title']) ?></h1><p><?= e((string)($module['description'] ?? '')) ?></p></div><div class="chip">❤️ 3 vies par tentative</div></div>
+<div class="page-head"><div><span class="eyebrow"><?= e((string)($module['icon'] ?: '📘')) ?> MODULE <?= (int)$module['id'] ?></span><h1><?= e((string)$module['title']) ?></h1><p><?= e((string)($module['description'] ?? '')) ?></p></div><div class="chip module-lives">❤️ 3 vies par tentative</div></div>
 
 <section style="margin-top:1.25rem">
     <div style="display:flex;justify-content:space-between;align-items:end;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
@@ -39,7 +50,7 @@ $modeLabels = [
         </div>
     </div>
 
-    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem">
+    <div class="mode-grid">
         <?php foreach ($paths as $path):
             $code = (string)$path['code'];
             $mode = $modeLabels[$code] ?? (string)$path['name'];
@@ -48,12 +59,12 @@ $modeLabels = [
             $badgeObtained = (int)($path['badge_obtained'] ?? 0) === 1;
             $currentAttempt = (int)($path['current_attempt_id'] ?? 0);
         ?>
-        <article class="card" style="padding:1.15rem;<?= !$unlocked ? 'opacity:.55;filter:saturate(.65);' : '' ?>">
-            <div>
-                <div style="font-size:1.8rem"><?= e((string)($path['icon'] ?: '🎯')) ?></div>
-                <h3 style="margin:.45rem 0 .25rem">Mode <?= e($mode) ?></h3>
+        <article class="card mode-card" style="<?= !$unlocked ? 'opacity:.55;filter:saturate(.65);' : '' ?>">
+            <div class="mode-title">
+                <span class="mode-icon"><?= e((string)($path['icon'] ?: '🎯')) ?></span>
+                <h3>Mode <?= e($mode) ?></h3>
             </div>
-            <p style="color:var(--muted);min-height:3.5em"><?= e((string)($path['description'] ?? '')) ?></p>
+            <p class="mode-description"><?= e((string)($path['description'] ?? '')) ?></p>
             <div class="stats-row" style="margin:.9rem 0">
                 <div class="stat-mini"><strong><?= (int)$path['question_count'] ?></strong><span>questions</span></div>
             </div>
@@ -68,6 +79,7 @@ $modeLabels = [
                 <div class="chip" style="margin-bottom:.75rem">✅ Mode terminé</div>
             <?php endif; ?>
 
+            <div class="mode-footer">
             <?php if ($unlocked): ?>
             <form method="post" action="<?= e(Url::to('module/' . (int)$module['id'] . '/start')) ?>">
                 <input type="hidden" name="csrf_token" value="<?= e((string)$csrfToken) ?>">
@@ -79,6 +91,7 @@ $modeLabels = [
             <?php else: ?>
                 <button class="btn btn-secondary" type="button" disabled style="width:100%;cursor:not-allowed">🔒 Mode <?= e($mode) ?> verrouillé</button>
             <?php endif; ?>
+            </div>
         </article>
         <?php endforeach; ?>
     </div>
