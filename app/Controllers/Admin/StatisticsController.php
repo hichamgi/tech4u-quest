@@ -71,7 +71,7 @@ final class StatisticsController
                     COUNT(a.id) AS attempts,
                     COUNT(CASE WHEN a.status='completed' THEN 1 END) AS completed,
                     COUNT(DISTINCT CASE WHEN a.status='completed' THEN a.student_id END) AS students_completed,
-                    COUNT(DISTINCT spb.student_id) AS badge_holders
+                    COUNT(DISTINCT CASE WHEN sb_student.id IS NOT NULL THEN spb.student_id END) AS badge_holders
              FROM module_paths p
              LEFT JOIN attempts a ON a.path_id=p.id
              LEFT JOIN students s ON s.id=a.student_id AND {$studentFilter}
