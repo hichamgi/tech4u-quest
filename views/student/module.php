@@ -35,7 +35,7 @@ $modeLabels = [
     <div style="display:flex;justify-content:space-between;align-items:end;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
         <div>
             <h2 style="margin:0">Choisis ton mode</h2>
-            <p style="margin:.4rem 0 0;color:var(--muted)">Commence obligatoirement par le mode Facile. Chaque mode terminé donne un badge, et ce badge débloque le mode suivant.</p>
+            <p style="margin:.4rem 0 0;color:var(--muted)">Commence par le mode Facile. Chaque badge obtenu débloque le mode suivant.</p>
         </div>
     </div>
 
@@ -49,12 +49,9 @@ $modeLabels = [
             $currentAttempt = (int)($path['current_attempt_id'] ?? 0);
         ?>
         <article class="card" style="padding:1.15rem;<?= !$unlocked ? 'opacity:.55;filter:saturate(.65);' : '' ?>">
-            <div style="display:flex;justify-content:space-between;gap:.75rem;align-items:flex-start">
-                <div>
-                    <div style="font-size:1.8rem"><?= e((string)($path['icon'] ?: '🎯')) ?></div>
-                    <h3 style="margin:.45rem 0 .25rem">Mode <?= e($mode) ?></h3>
-                </div>
-                <span class="badge"><?= (int)$path['pool_percent'] ?> %</span>
+            <div>
+                <div style="font-size:1.8rem"><?= e((string)($path['icon'] ?: '🎯')) ?></div>
+                <h3 style="margin:.45rem 0 .25rem">Mode <?= e($mode) ?></h3>
             </div>
             <p style="color:var(--muted);min-height:3.5em"><?= e((string)($path['description'] ?? '')) ?></p>
             <div class="stats-row" style="margin:.9rem 0">
@@ -88,7 +85,25 @@ $modeLabels = [
     </div>
 </section>
 
-<div class="quest-layout" style="margin-top:1.25rem"><section class="card card-pad"><h2>Progression et badges</h2><p style="color:var(--muted);line-height:1.7">Chaque module possède quatre badges : Facile, Moyen, Difficile et Expert. Obtenir le badge Facile débloque le mode Moyen ; le badge Moyen débloque le mode Difficile ; le badge Difficile débloque le mode Expert. Une mauvaise réponse retire une vie et il faut répondre correctement pour avancer.</p><div class="stats-row"><div class="stat-mini"><strong>4 🏅</strong><span>badges par module</span></div><div class="stat-mini"><strong>25 → 100 %</strong><span>couverture</span></div><div class="stat-mini"><strong><?= (int)$module['initial_lives'] ?> ❤️</strong><span>par tentative</span></div></div></section><aside class="side-stack"><div class="card side-card"><h3>Catégories du module</h3><div class="category-list"><?php foreach ($module['categories'] as $c): ?><div class="category"><span><?= e((string)$c['name']) ?></span><b><?= (int)$c['active_questions'] ?></b></div><?php endforeach; ?></div></div></aside></div>
+<section class="card card-pad" style="margin-top:1.25rem">
+    <h2>Progression et badges</h2>
+    <p style="color:var(--muted);line-height:1.7">Les badges sont désactivés au départ. Chaque fois que tu termines un mode, son badge devient actif et débloque le mode suivant.</p>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-top:1rem">
+        <?php foreach ($paths as $path):
+            $code = (string)$path['code'];
+            $mode = $modeLabels[$code] ?? (string)$path['name'];
+            $badgeObtained = (int)($path['badge_obtained'] ?? 0) === 1;
+        ?>
+            <div class="card" style="padding:1rem;text-align:center;<?= $badgeObtained ? '' : 'opacity:.42;filter:grayscale(1);' ?>">
+                <div style="font-size:2.2rem;margin-bottom:.4rem"><?= e((string)($path['icon'] ?: '🏅')) ?></div>
+                <strong>Badge <?= e($mode) ?></strong>
+                <div style="margin-top:.55rem">
+                    <span class="chip"><?= $badgeObtained ? '✅ Obtenu' : '🔒 Non obtenu' ?></span>
+                </div>
+            </div>
+        <?php endforeach; ?>
+    </div>
+</section>
 <?php endif; ?>
 </main>
 </body>
