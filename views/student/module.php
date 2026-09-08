@@ -29,7 +29,7 @@ $modeLabels = [
 <?php if ($error): ?>
 <div class="card card-pad" style="border-color:#fb7185"><strong><?= e((string)$error) ?></strong><div style="margin-top:1rem"><a class="btn btn-secondary" href="<?= e(Url::to('dashboard')) ?>">Retour</a></div></div>
 <?php elseif ($module): ?>
-<div class="page-head"><div><span class="eyebrow"><?= e((string)($module['icon'] ?: '📘')) ?> MODULE <?= (int)$module['id'] ?></span><h1><?= e((string)$module['title']) ?></h1><p><?= e((string)($module['description'] ?? '')) ?></p></div></div>
+<div class="page-head"><div><span class="eyebrow"><?= e((string)($module['icon'] ?: '📘')) ?> MODULE <?= (int)$module['id'] ?></span><h1><?= e((string)$module['title']) ?></h1><p><?= e((string)($module['description'] ?? '')) ?></p></div><div class="chip">❤️ 3 vies par tentative</div></div>
 
 <section style="margin-top:1.25rem">
     <div style="display:flex;justify-content:space-between;align-items:end;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
@@ -56,7 +56,6 @@ $modeLabels = [
             <p style="color:var(--muted);min-height:3.5em"><?= e((string)($path['description'] ?? '')) ?></p>
             <div class="stats-row" style="margin:.9rem 0">
                 <div class="stat-mini"><strong><?= (int)$path['question_count'] ?></strong><span>questions</span></div>
-                <div class="stat-mini"><strong><?= (int)$module['initial_lives'] ?> ❤️</strong><span>vies</span></div>
             </div>
 
             <?php if ($badgeObtained): ?>
