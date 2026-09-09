@@ -40,5 +40,6 @@ function e(string $value): string
     </section>
 <?php endif; ?>
 </main>
+<?php require dirname(__DIR__) . '/_copyright.php'; ?>
 </body>
 </html>
