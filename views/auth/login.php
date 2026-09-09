@@ -47,5 +47,6 @@ function e(string $value): string
         </form>
     </section>
 </main>
+<?php require dirname(__DIR__) . '/_copyright.php'; ?>
 </body>
 </html>
