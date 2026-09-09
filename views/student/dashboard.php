@@ -49,5 +49,6 @@ $status = $completed ? 'Terminé' : ($resume ? 'En cours' : ($available ? 'À co
 <?php foreach ($badges as $b): ?><article class="card module-card"><div class="module-icon"><?= e((string)($b['icon'] ?: '🏆')) ?></div><h3><?= e((string)$b['name']) ?></h3><p><?= e((string)($b['description'] ?? '')) ?></p><small><?= e((string)$b['module_title']) ?> · obtenu le <?= e(DateFormatter::human((string)$b['obtained_at'])) ?></small></article><?php endforeach; ?>
 </div></section>
 </main>
+<?php require dirname(__DIR__) . '/_copyright.php'; ?>
 </body>
 </html>
