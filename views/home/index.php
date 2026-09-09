@@ -32,5 +32,6 @@ function e(string $value): string
 </section>
 <section class="hero-card"><img class="logo" src="<?= e(Url::asset('images/logo.png')) ?>" alt="Logo Tech4U-QUEST"></section>
 </main>
+<?php require dirname(__DIR__) . '/_copyright.php'; ?>
 </body>
 </html>
