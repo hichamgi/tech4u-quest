@@ -51,5 +51,6 @@ $isCodeQuestion = str_contains($questionText, "\n") || preg_match('/(^|\n)\s*\d+
 </section><aside class="side-stack"><div class="card side-card"><h3>Progression</h3><div class="score-big" style="font-size:42px;margin:8px 0"><?= (int)$attempt['score'] ?> / <?= $total ?></div><p style="color:var(--muted)"><?= (int)$attempt['lives'] ?> vie(s) restante(s).</p></div><div class="card side-card"><h3>Règle</h3><p style="color:var(--muted);line-height:1.6">Une mauvaise réponse = −1 vie. La question reste affichée jusqu’à la bonne réponse ou jusqu’à épuisement des vies.</p></div></aside></div>
 <?php endif; ?>
 </main>
+<?php require dirname(__DIR__) . '/_copyright.php'; ?>
 </body>
 </html>
