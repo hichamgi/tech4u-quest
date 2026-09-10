@@ -72,6 +72,33 @@ final class GameController
 
                     $feedback = 'Mauvaise réponse : une vie a été retirée. Réessaie la même question.';
                 } catch (Throwable $e) {
+                    // En cas de double clic / renvoi réseau, l’état peut avoir changé
+                    // pendant que la seconde requête attendait le verrou SQLite.
+                    try {
+                        $currentAttempt = $game->attempt($attemptId, (int)$student['id']);
+                        $status = (string)($currentAttempt['status'] ?? '');
+
+                        if ($status === 'completed') {
+                            header('Location: ' . Url::to('attempt/' . $attemptId . '/complete'));
+                            exit;
+                        }
+
+                        if ($status === 'game_over') {
+                            header('Location: ' . Url::to('attempt/' . $attemptId . '/game-over'));
+                            exit;
+                        }
+
+                        if ($status === 'in_progress' && in_array($e->getMessage(), [
+                            'Cette question a déjà été traitée. Recharge la page pour continuer.',
+                            'Cette tentative a déjà été modifiée. Recharge la page.',
+                        ], true)) {
+                            header('Location: ' . Url::to('question/' . $attemptId));
+                            exit;
+                        }
+                    } catch (Throwable) {
+                        // On conserve l’erreur initiale si la tentative ne peut pas être relue.
+                    }
+
                     $error = $e->getMessage();
                 }
             }
