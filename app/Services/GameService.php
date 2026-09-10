@@ -253,7 +253,11 @@ final class GameService
         $attempt=$this->attempt($attemptId,$studentId);if((string)$attempt['status']!=='in_progress')throw new RuntimeException('Cette tentative est terminée.');
         $stmt=$this->db->prepare('SELECT aq.id AS attempt_question_id,aq.position,aq.wrong_answers,q.id,q.question,q.type,q.difficulty,q.explanation,q.lesson,q.topic,c.name AS category_name FROM attempt_questions aq JOIN questions q ON q.id=aq.question_id JOIN categories c ON c.id=q.category_id WHERE aq.attempt_id=:attempt AND aq.position=:position');
         $stmt->execute(['attempt'=>$attemptId,'position'=>$attempt['current_position']]);$question=$stmt->fetch(PDO::FETCH_ASSOC);if(!$question)throw new RuntimeException('Question courante introuvable.');
-        $ans=$this->db->prepare('SELECT id,answer,display_order FROM question_answers WHERE question_id=:question ORDER BY RANDOM()');$ans->execute(['question'=>$question['id']]);$question['answers']=$ans->fetchAll(PDO::FETCH_ASSOC);$question['attempt']=$attempt;return $question;
+        $ans=$this->db->prepare('SELECT id,answer,display_order FROM question_answers WHERE question_id=:question ORDER BY display_order,id');
+        $ans->execute(['question'=>$question['id']]);
+        $question['answers']=$this->stableAnswerOrder($ans->fetchAll(PDO::FETCH_ASSOC),(int)$question['attempt_question_id']);
+        $question['attempt']=$attempt;
+        return $question;
     }
 
     public function submit(int $attemptId,int $studentId,array $input): array
@@ -292,8 +296,13 @@ final class GameService
             elseif($type==='short'){
                 $shortAnswer=trim((string)($input['short_answer']??''));
                 if($shortAnswer==='')throw new RuntimeException('Saisis une réponse.');
-                $normalized=mb_strtolower($shortAnswer);
-                foreach($answers as $a)if((int)$a['is_correct']===1&&mb_strtolower(trim((string)$a['answer']))===$normalized){$isCorrect=true;break;}
+                $normalized=$this->normalizeShortAnswer($shortAnswer);
+                foreach($answers as $a){
+                    if((int)$a['is_correct']===1 && $this->normalizeShortAnswer((string)$a['answer'])===$normalized){
+                        $isCorrect=true;
+                        break;
+                    }
+                }
             }
 
             $log=$this->db->prepare('INSERT INTO attempt_answers(attempt_id,attempt_question_id,answer_id,short_answer,is_correct) VALUES(:attempt,:aq,:answer_id,:short_answer,:correct)');
@@ -332,6 +341,33 @@ final class GameService
             }
             throw $e;
         }
+    }
+
+    private function stableAnswerOrder(array $answers,int $attemptQuestionId): array
+    {
+        usort($answers,static function(array $a,array $b) use($attemptQuestionId): int {
+            $hashA=hash('sha256',$attemptQuestionId.':'.(int)$a['id']);
+            $hashB=hash('sha256',$attemptQuestionId.':'.(int)$b['id']);
+            return $hashA<=>$hashB;
+        });
+        return $answers;
+    }
+
+    private function normalizeShortAnswer(string $value): string
+    {
+        $value=mb_strtolower(trim($value),'UTF-8');
+        $value=strtr($value,[
+            'à'=>'a','á'=>'a','â'=>'a','ä'=>'a','ã'=>'a','å'=>'a',
+            'ç'=>'c',
+            'è'=>'e','é'=>'e','ê'=>'e','ë'=>'e',
+            'ì'=>'i','í'=>'i','î'=>'i','ï'=>'i',
+            'ñ'=>'n',
+            'ò'=>'o','ó'=>'o','ô'=>'o','ö'=>'o','õ'=>'o','œ'=>'oe',
+            'ù'=>'u','ú'=>'u','û'=>'u','ü'=>'u',
+            'ý'=>'y','ÿ'=>'y',
+            '’'=>"'",
+        ]);
+        return preg_replace('/\s+/u',' ',$value) ?? $value;
     }
 
     private function awardPathBadge(int $studentId,int $pathId,int $attemptId): void
