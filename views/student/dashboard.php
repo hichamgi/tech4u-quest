@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 
+use App\Core\Auth;
 use App\Core\Url;
 use App\Core\DateFormatter;
 
@@ -20,7 +21,7 @@ function e(string $value): string
 <body>
 <header class="site-header"><div class="container nav">
 <a class="brand" href="<?= e(Url::to('dashboard')) ?>"><span class="brand-mark">⚡</span><span>Tech4U <b>QUEST</b></span></a>
-<nav class="nav-links"><a class="nav-link active" href="<?= e(Url::to('dashboard')) ?>">Mes quêtes</a><a class="nav-link" href="#badges">Badges</a><a class="btn btn-secondary" href="<?= e(Url::to('logout')) ?>">Déconnexion</a></nav>
+<nav class="nav-links"><a class="nav-link active" href="<?= e(Url::to('dashboard')) ?>">Mes quêtes</a><a class="nav-link" href="#badges">Badges</a><form method="post" action="<?= e(Url::to('logout')) ?>" style="margin:0"><input type="hidden" name="csrf_token" value="<?= e(Auth::csrfToken()) ?>"><button class="btn btn-secondary" type="submit">Déconnexion</button></form></nav>
 </div></header>
 <main class="container page">
 <div class="page-head"><div><span class="eyebrow">⚔️ TABLEAU DE BORD ÉLÈVE</span><h1>Bonjour <?= e((string)$student['login']) ?> 👋</h1><p>Choisis un module. Commence par le mode Facile puis débloque les niveaux suivants grâce aux badges.</p></div><div class="chip">🏆 <?= (int)$badgeCount ?> badge<?= (int)$badgeCount > 1 ? 's' : '' ?></div></div>
