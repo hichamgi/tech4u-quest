@@ -36,6 +36,11 @@ final class Database
 
     private static function ensureMigrationTable(PDO $pdo): void
     {
+        $exists = $pdo->query(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_migrations' LIMIT 1"
+        )->fetchColumn();
+        if ($exists !== false) return;
+
         $pdo->exec(
             'CREATE TABLE IF NOT EXISTS schema_migrations (
                 version TEXT PRIMARY KEY,
@@ -44,15 +49,21 @@ final class Database
         );
     }
 
+    private static function migrationApplied(PDO $pdo, string $version): bool
+    {
+        $check = $pdo->prepare('SELECT 1 FROM schema_migrations WHERE version=:version LIMIT 1');
+        $check->execute(['version' => $version]);
+        return $check->fetchColumn() !== false;
+    }
+
     private static function migrate(PDO $pdo): void
     {
         self::ensureMigrationTable($pdo);
+        if (self::migrationApplied($pdo, self::MIGRATION_VERSION)) return;
 
         $pdo->exec('BEGIN IMMEDIATE');
         try {
-            $check = $pdo->prepare('SELECT 1 FROM schema_migrations WHERE version = :version LIMIT 1');
-            $check->execute(['version' => self::MIGRATION_VERSION]);
-            if ($check->fetchColumn() !== false) {
+            if (self::migrationApplied($pdo, self::MIGRATION_VERSION)) {
                 $pdo->exec('COMMIT');
                 return;
             }
@@ -208,11 +219,11 @@ final class Database
     private static function migrateLoginRateLimits(PDO $pdo): void
     {
         self::ensureMigrationTable($pdo);
+        if (self::migrationApplied($pdo, self::LOGIN_RATE_LIMIT_MIGRATION_VERSION)) return;
+
         $pdo->exec('BEGIN IMMEDIATE');
         try {
-            $check = $pdo->prepare('SELECT 1 FROM schema_migrations WHERE version=:version LIMIT 1');
-            $check->execute(['version' => self::LOGIN_RATE_LIMIT_MIGRATION_VERSION]);
-            if ($check->fetchColumn() !== false) {
+            if (self::migrationApplied($pdo, self::LOGIN_RATE_LIMIT_MIGRATION_VERSION)) {
                 $pdo->exec('COMMIT');
                 return;
             }
