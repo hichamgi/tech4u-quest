@@ -9,6 +9,7 @@ use RuntimeException;
 final class Database
 {
     private const MIGRATION_VERSION = '2026-09-10_progression_schema_v1';
+    private const LOGIN_RATE_LIMIT_MIGRATION_VERSION = '2026-09-10_login_rate_limit_v1';
 
     private static ?PDO $pdo = null;
 
@@ -29,10 +30,11 @@ final class Database
         self::$pdo->exec('PRAGMA journal_mode = WAL;');
         self::$pdo->exec('PRAGMA busy_timeout = 5000;');
         self::migrate(self::$pdo);
+        self::migrateLoginRateLimits(self::$pdo);
         return self::$pdo;
     }
 
-    private static function migrate(PDO $pdo): void
+    private static function ensureMigrationTable(PDO $pdo): void
     {
         $pdo->exec(
             'CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -40,9 +42,12 @@ final class Database
                 applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )'
         );
+    }
 
-        // La vérification est faite sous verrou d'écriture afin que deux
-        // premières requêtes simultanées ne puissent pas lancer la migration ensemble.
+    private static function migrate(PDO $pdo): void
+    {
+        self::ensureMigrationTable($pdo);
+
         $pdo->exec('BEGIN IMMEDIATE');
         try {
             $check = $pdo->prepare('SELECT 1 FROM schema_migrations WHERE version = :version LIMIT 1');
@@ -191,6 +196,40 @@ final class Database
 
             $mark = $pdo->prepare('INSERT INTO schema_migrations(version) VALUES(:version)');
             $mark->execute(['version' => self::MIGRATION_VERSION]);
+            $pdo->exec('COMMIT');
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->exec('ROLLBACK');
+            }
+            throw $e;
+        }
+    }
+
+    private static function migrateLoginRateLimits(PDO $pdo): void
+    {
+        self::ensureMigrationTable($pdo);
+        $pdo->exec('BEGIN IMMEDIATE');
+        try {
+            $check = $pdo->prepare('SELECT 1 FROM schema_migrations WHERE version=:version LIMIT 1');
+            $check->execute(['version' => self::LOGIN_RATE_LIMIT_MIGRATION_VERSION]);
+            if ($check->fetchColumn() !== false) {
+                $pdo->exec('COMMIT');
+                return;
+            }
+
+            $pdo->exec(
+                'CREATE TABLE IF NOT EXISTS login_rate_limits (
+                    key_hash TEXT PRIMARY KEY,
+                    failures INTEGER NOT NULL DEFAULT 0 CHECK(failures >= 0),
+                    first_failure_at INTEGER NOT NULL,
+                    blocked_until INTEGER,
+                    updated_at INTEGER NOT NULL
+                )'
+            );
+            $pdo->exec('CREATE INDEX IF NOT EXISTS idx_login_rate_limits_updated ON login_rate_limits(updated_at)');
+
+            $mark = $pdo->prepare('INSERT INTO schema_migrations(version) VALUES(:version)');
+            $mark->execute(['version' => self::LOGIN_RATE_LIMIT_MIGRATION_VERSION]);
             $pdo->exec('COMMIT');
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) {
