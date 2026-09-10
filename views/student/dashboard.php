@@ -26,6 +26,10 @@ function e(string $value): string
 <main class="container page">
 <div class="page-head"><div><span class="eyebrow">⚔️ TABLEAU DE BORD ÉLÈVE</span><h1>Bonjour <?= e((string)$student['login']) ?> 👋</h1><p>Choisis un module. Commence par le mode Facile puis débloque les niveaux suivants grâce aux badges.</p></div><div class="chip">🏆 <?= (int)$badgeCount ?> badge<?= (int)$badgeCount > 1 ? 's' : '' ?></div></div>
 
+<?php if (!empty($error)): ?>
+<div class="card card-pad" style="border-color:#fb7185;margin-bottom:1rem"><strong><?= e((string)$error) ?></strong></div>
+<?php endif; ?>
+
 <section class="grid module-grid">
 <?php foreach ($modules as $m):
 $total = max(1, (int)$m['question_count']);
