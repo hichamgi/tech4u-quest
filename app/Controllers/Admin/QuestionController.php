@@ -243,25 +243,49 @@ final class QuestionController
             if (!Auth::validateCsrf($_POST['csrf_token'] ?? null)) {
                 $errors[] = 'Jeton de sécurité invalide.';
             } elseif (($_POST['action'] ?? '') === 'commit' && is_array($preview)) {
-                $ok = 0;
-                $failed = [];
-                foreach ($preview['valid'] as $i => $data) {
+                $validRows = is_array($preview['valid'] ?? null) ? $preview['valid'] : [];
+
+                if ($validRows === []) {
+                    $errors[] = 'Aucune question valide à importer.';
+                } else {
                     try {
-                        $svc->save($data);
-                        $ok++;
+                        $db->beginTransaction();
+                        foreach ($validRows as $i => $data) {
+                            try {
+                                $svc->save($data);
+                            } catch (Throwable $e) {
+                                if ($e instanceof RuntimeException) {
+                                    throw new RuntimeException('Ligne ' . ($i + 2) . ' : ' . $e->getMessage(), 0, $e);
+                                }
+                                Logger::exception($e, [
+                                    'controller'=>'Admin\\QuestionController',
+                                    'action'=>'import_commit',
+                                    'line'=>$i + 2,
+                                ]);
+                                throw new RuntimeException('Ligne ' . ($i + 2) . ' : erreur technique lors de l’enregistrement.', 0, $e);
+                            }
+                        }
+                        $db->commit();
+
+                        $imported = count($validRows);
+                        unset($_SESSION['question_import_preview']);
+                        $preview = null;
+                        $message = $imported . ' question(s) importée(s). Import atomique terminé avec succès.';
                     } catch (Throwable $e) {
+                        if ($db->inTransaction()) {
+                            $db->rollBack();
+                        }
                         if ($e instanceof RuntimeException) {
-                            $failed[] = 'Ligne ' . ($i + 2) . ' : ' . $e->getMessage();
+                            $errors[] = $e->getMessage() . ' Import annulé : aucune question du lot n’a été enregistrée.';
                         } else {
-                            Logger::exception($e, ['controller'=>'Admin\\QuestionController','action'=>'import_commit','line'=>$i+2]);
-                            $failed[] = 'Ligne ' . ($i + 2) . ' : erreur technique lors de l’enregistrement.';
+                            Logger::exception($e, [
+                                'controller'=>'Admin\\QuestionController',
+                                'action'=>'import_commit_atomic',
+                            ]);
+                            $errors[] = 'Erreur technique pendant l’import. Import annulé : aucune question du lot n’a été enregistrée.';
                         }
                     }
                 }
-                unset($_SESSION['question_import_preview']);
-                $preview = null;
-                $message = $ok . ' question(s) importée(s).';
-                $errors = $failed;
             } else {
                 $file = $_FILES['csv'] ?? null;
                 if (!is_array($file) || (int)($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
