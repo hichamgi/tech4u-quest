@@ -11,19 +11,7 @@ final class LoginRateLimiter
     private const WINDOW_SECONDS = 600;
     private const BLOCK_SECONDS = 600;
 
-    public function __construct(private PDO $db)
-    {
-        $this->db->exec(
-            'CREATE TABLE IF NOT EXISTS login_rate_limits (
-                key_hash TEXT PRIMARY KEY,
-                failures INTEGER NOT NULL DEFAULT 0 CHECK(failures >= 0),
-                first_failure_at INTEGER NOT NULL,
-                blocked_until INTEGER,
-                updated_at INTEGER NOT NULL
-            )'
-        );
-        $this->db->exec('CREATE INDEX IF NOT EXISTS idx_login_rate_limits_updated ON login_rate_limits(updated_at)');
-    }
+    public function __construct(private PDO $db) {}
 
     public function isBlocked(string $identifier, string $ip): bool
     {
@@ -105,7 +93,6 @@ final class LoginRateLimiter
 
     private function purgeOldRows(int $now): void
     {
-        // Maintenance probabiliste pour éviter une écriture à chaque requête.
         if (random_int(1, 100) !== 1) {
             return;
         }
