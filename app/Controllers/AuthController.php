@@ -5,8 +5,11 @@ namespace App\Controllers;
 
 use App\Core\Auth;
 use App\Core\Database;
+use App\Core\Logger;
 use App\Core\Url;
 use App\Core\View;
+use App\Services\LoginRateLimiter;
+use Throwable;
 
 final class AuthController
 {
@@ -25,13 +28,29 @@ final class AuthController
             $identifier = trim((string)($_POST['identifier'] ?? ''));
             $password = (string)($_POST['password'] ?? '');
             $csrf = $_POST['csrf_token'] ?? null;
+            $ip = (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown');
 
             if (!Auth::validateCsrf(is_string($csrf) ? $csrf : null)) {
                 $error = 'Session expirée. Recharge la page et réessaie.';
-            } elseif (Auth::attempt($identifier, $password)) {
-                $this->redirectAfterLogin();
             } else {
-                $error = 'Identifiant ou mot de passe incorrect.';
+                try {
+                    $db = Database::connection();
+                    $limiter = new LoginRateLimiter($db);
+
+                    if ($limiter->isBlocked($identifier, $ip)) {
+                        http_response_code(429);
+                        $error = 'Trop de tentatives de connexion. Réessaie dans quelques minutes.';
+                    } elseif (Auth::attempt($identifier, $password)) {
+                        $limiter->clear($identifier, $ip);
+                        $this->redirectAfterLogin();
+                    } else {
+                        $limiter->registerFailure($identifier, $ip);
+                        $error = 'Identifiant ou mot de passe incorrect.';
+                    }
+                } catch (Throwable $e) {
+                    Logger::exception($e, ['area' => 'login']);
+                    $error = 'La connexion est temporairement indisponible. Réessaie dans un instant.';
+                }
             }
         }
 
@@ -65,31 +84,36 @@ final class AuthController
             } elseif ($newPassword !== $confirmPassword) {
                 $error = 'Les deux mots de passe ne correspondent pas.';
             } else {
-                $db = Database::connection();
-                $stmt = $db->prepare('SELECT password_hash FROM students WHERE id = :id AND active = 1 LIMIT 1');
-                $stmt->execute(['id' => (int)$student['id']]);
-                $currentHash = $stmt->fetchColumn();
+                try {
+                    $db = Database::connection();
+                    $stmt = $db->prepare('SELECT password_hash FROM students WHERE id = :id AND active = 1 LIMIT 1');
+                    $stmt->execute(['id' => (int)$student['id']]);
+                    $currentHash = $stmt->fetchColumn();
 
-                if (!$currentHash) {
-                    $error = 'Compte élève introuvable.';
-                } elseif (password_verify($newPassword, (string)$currentHash)) {
-                    $error = 'Choisis un mot de passe différent du mot de passe provisoire.';
-                } else {
-                    $update = $db->prepare(
-                        'UPDATE students
-                         SET password_hash = :password_hash,
-                             must_change_password = 0,
-                             updated_at = CURRENT_TIMESTAMP
-                         WHERE id = :id'
-                    );
-                    $update->execute([
-                        'password_hash' => password_hash($newPassword, PASSWORD_DEFAULT),
-                        'id' => (int)$student['id'],
-                    ]);
+                    if (!$currentHash) {
+                        $error = 'Compte élève introuvable.';
+                    } elseif (password_verify($newPassword, (string)$currentHash)) {
+                        $error = 'Choisis un mot de passe différent du mot de passe provisoire.';
+                    } else {
+                        $update = $db->prepare(
+                            'UPDATE students
+                             SET password_hash = :password_hash,
+                                 must_change_password = 0,
+                                 updated_at = CURRENT_TIMESTAMP
+                             WHERE id = :id'
+                        );
+                        $update->execute([
+                            'password_hash' => password_hash($newPassword, PASSWORD_DEFAULT),
+                            'id' => (int)$student['id'],
+                        ]);
 
-                    Auth::markStudentPasswordChanged();
-                    header('Location: ' . Url::to('dashboard'));
-                    exit;
+                        Auth::markStudentPasswordChanged();
+                        header('Location: ' . Url::to('dashboard'));
+                        exit;
+                    }
+                } catch (Throwable $e) {
+                    Logger::exception($e, ['area' => 'change_password', 'student_id' => (int)$student['id']]);
+                    $error = 'Impossible de modifier le mot de passe pour le moment. Réessaie dans un instant.';
                 }
             }
         }
