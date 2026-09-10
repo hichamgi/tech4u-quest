@@ -41,14 +41,17 @@ final class Database
             )'
         );
 
-        $check = $pdo->prepare('SELECT 1 FROM schema_migrations WHERE version = :version LIMIT 1');
-        $check->execute(['version' => self::MIGRATION_VERSION]);
-        if ($check->fetchColumn() !== false) {
-            return;
-        }
-
-        $pdo->beginTransaction();
+        // La vérification est faite sous verrou d'écriture afin que deux
+        // premières requêtes simultanées ne puissent pas lancer la migration ensemble.
+        $pdo->exec('BEGIN IMMEDIATE');
         try {
+            $check = $pdo->prepare('SELECT 1 FROM schema_migrations WHERE version = :version LIMIT 1');
+            $check->execute(['version' => self::MIGRATION_VERSION]);
+            if ($check->fetchColumn() !== false) {
+                $pdo->exec('COMMIT');
+                return;
+            }
+
             $cols = $pdo->query('PRAGMA table_info(questions)')->fetchAll(PDO::FETCH_ASSOC);
             $names = array_column($cols, 'name');
             if (!in_array('exclusion_group', $names, true)) {
@@ -188,10 +191,10 @@ final class Database
 
             $mark = $pdo->prepare('INSERT INTO schema_migrations(version) VALUES(:version)');
             $mark->execute(['version' => self::MIGRATION_VERSION]);
-            $pdo->commit();
+            $pdo->exec('COMMIT');
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) {
-                $pdo->rollBack();
+                $pdo->exec('ROLLBACK');
             }
             throw $e;
         }
