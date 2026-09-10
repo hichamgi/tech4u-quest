@@ -16,6 +16,7 @@ final class ArchiveService
     private array $studentDataTables = [
         'attempt_answers',
         'attempt_questions',
+        'student_path_badges',
         'student_badges',
         'attempts',
         'student_login_history',
