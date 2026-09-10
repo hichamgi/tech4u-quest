@@ -37,6 +37,7 @@ $isCodeQuestion = str_contains($questionText, "\n") || preg_match('/(^|\n)\s*\d+
 <h1 class="question-title<?= $isCodeQuestion ? ' code-question' : '' ?>"><?= e($questionText) ?></h1>
 <form method="post" action="<?= e(Url::to('question/' . $attemptId)) ?>">
 <input type="hidden" name="csrf_token" value="<?= e((string)$csrfToken) ?>">
+<input type="hidden" name="attempt_question_id" value="<?= (int)$data['attempt_question_id'] ?>">
 <div class="answers">
 <?php if (in_array($data['type'], ['qcm','true_false'], true)): ?>
 <?php foreach ($data['answers'] as $i => $a): ?><label class="answer" style="cursor:pointer"><input type="radio" name="answer_id" value="<?= (int)$a['id'] ?>" required style="margin-right:.8rem"><span class="answer-key"><?= chr(65 + $i) ?></span><span><?= e((string)$a['answer']) ?></span></label><?php endforeach; ?>
