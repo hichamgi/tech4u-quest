@@ -132,8 +132,8 @@ final class AuthController
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
             http_response_code(405);
             header('Allow: POST');
-            header('Location: ' . Url::to());
-            exit;
+            echo 'Méthode non autorisée.';
+            return;
         }
 
         $csrf = $_POST['csrf_token'] ?? null;
