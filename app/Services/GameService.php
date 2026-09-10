@@ -58,21 +58,34 @@ final class GameService
 
     public function startOrResume(int $studentId,int $moduleId,int $pathId,bool $includeInactive=false,bool $isDemo=false): int
     {
-        $this->module($moduleId,$includeInactive);
-        $path=$this->path($pathId,$moduleId);
-        if(!$this->pathUnlocked($studentId,$path,$isDemo)) {
-            throw new RuntimeException('Ce niveau est verrouillé. Obtiens d’abord le badge du niveau précédent.');
+        $this->db->exec('BEGIN IMMEDIATE');
+        try {
+            $this->module($moduleId,$includeInactive);
+            $path=$this->path($pathId,$moduleId);
+            if(!$this->pathUnlocked($studentId,$path,$isDemo)) {
+                throw new RuntimeException('Ce niveau est verrouillé. Obtiens d’abord le badge du niveau précédent.');
+            }
+
+            $stmt=$this->db->prepare('SELECT id FROM attempts WHERE student_id=:student AND module_id=:module AND path_id=:path AND status="in_progress" ORDER BY id DESC LIMIT 1');
+            $stmt->execute(['student'=>$studentId,'module'=>$moduleId,'path'=>$pathId]);
+            $existing=$stmt->fetchColumn();
+            if($existing!==false) {
+                $this->db->exec('COMMIT');
+                return (int)$existing;
+            }
+
+            $lastStmt=$this->db->prepare('SELECT * FROM attempts WHERE student_id=:student AND module_id=:module AND path_id=:path ORDER BY id DESC LIMIT 1');
+            $lastStmt->execute(['student'=>$studentId,'module'=>$moduleId,'path'=>$pathId]);
+            $last=$lastStmt->fetch(PDO::FETCH_ASSOC)?:null;
+            $attemptId=$this->createAttempt($studentId,$moduleId,$path,$last,$includeInactive);
+            $this->db->exec('COMMIT');
+            return $attemptId;
+        } catch (\Throwable $e) {
+            if($this->db->inTransaction()) {
+                $this->db->exec('ROLLBACK');
+            }
+            throw $e;
         }
-
-        $stmt=$this->db->prepare('SELECT id FROM attempts WHERE student_id=:student AND module_id=:module AND path_id=:path AND status="in_progress" ORDER BY id DESC LIMIT 1');
-        $stmt->execute(['student'=>$studentId,'module'=>$moduleId,'path'=>$pathId]);
-        $existing=$stmt->fetchColumn();
-        if($existing!==false) return (int)$existing;
-
-        $lastStmt=$this->db->prepare('SELECT * FROM attempts WHERE student_id=:student AND module_id=:module AND path_id=:path ORDER BY id DESC LIMIT 1');
-        $lastStmt->execute(['student'=>$studentId,'module'=>$moduleId,'path'=>$pathId]);
-        $last=$lastStmt->fetch(PDO::FETCH_ASSOC)?:null;
-        return $this->createAttempt($studentId,$moduleId,$path,$last,$includeInactive);
     }
 
     private function path(int $pathId,int $moduleId): array
@@ -111,19 +124,12 @@ final class GameService
 
         if(count($questions)!==$questionCount) throw new RuntimeException('La banque de questions ne permet pas de construire ce parcours.');
 
-        $this->db->beginTransaction();
-        try{
-            $insert=$this->db->prepare('INSERT INTO attempts(student_id,module_id,path_id,attempt_number,total_questions,current_position,lives,score,status) VALUES(:student,:module,:path,:attempt_number,:total,1,:lives,0,"in_progress")');
-            $insert->execute(['student'=>$studentId,'module'=>$moduleId,'path'=>$path['id'],'attempt_number'=>$attemptNumber,'total'=>$questionCount,'lives'=>$initialLives]);
-            $attemptId=(int)$this->db->lastInsertId();
-            $iq=$this->db->prepare('INSERT INTO attempt_questions(attempt_id,position,question_id) VALUES(:attempt,:position,:question)');
-            foreach($questions as $position=>$questionId) $iq->execute(['attempt'=>$attemptId,'position'=>$position,'question'=>$questionId]);
-            $this->db->commit();
-            return $attemptId;
-        }catch(\Throwable $e){
-            if($this->db->inTransaction()) $this->db->rollBack();
-            throw $e;
-        }
+        $insert=$this->db->prepare('INSERT INTO attempts(student_id,module_id,path_id,attempt_number,total_questions,current_position,lives,score,status) VALUES(:student,:module,:path,:attempt_number,:total,1,:lives,0,"in_progress")');
+        $insert->execute(['student'=>$studentId,'module'=>$moduleId,'path'=>$path['id'],'attempt_number'=>$attemptNumber,'total'=>$questionCount,'lives'=>$initialLives]);
+        $attemptId=(int)$this->db->lastInsertId();
+        $iq=$this->db->prepare('INSERT INTO attempt_questions(attempt_id,position,question_id) VALUES(:attempt,:position,:question)');
+        foreach($questions as $position=>$questionId) $iq->execute(['attempt'=>$attemptId,'position'=>$position,'question'=>$questionId]);
+        return $attemptId;
     }
 
     private function buildRetryPath(int $moduleId,array $path,array $previous,int $questionCount): array
@@ -205,9 +211,6 @@ final class GameService
         $all=$stmt->fetchAll(PDO::FETCH_ASSOC);
         if(!$all){if(!$required)return null;throw new RuntimeException("Aucune question active dans la catégorie {$categoryId}.");}
 
-        // Tous les niveaux utilisent toute la banque active de la catégorie.
-        // La différence entre les niveaux vient du nombre de questions à tirer
-        // et de la pondération de difficulté, pas d'un sous-ensemble arbitraire de la banque.
         $excludeIds=array_flip(array_map('intval',$exclude));
         $excludeGroups=array_flip(array_map('strval',$excludedGroups));
         $eligible=array_values(array_filter($all,static function(array $q) use($excludeIds,$excludeGroups):bool{
