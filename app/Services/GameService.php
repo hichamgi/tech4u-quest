@@ -173,11 +173,15 @@ final class GameService
 
     private function categoryAllocation(int $moduleId,int $questionCount): array
     {
-        $stmt=$this->db->prepare('SELECT c.id,COALESCE(NULLIF(mcs.question_count,0),1) AS weight FROM categories c LEFT JOIN module_category_settings mcs ON mcs.category_id=c.id AND mcs.module_id=c.module_id WHERE c.module_id=:module AND c.active=1 ORDER BY c.display_order,c.id');
+        $stmt=$this->db->prepare('SELECT c.id,COALESCE(mcs.question_count,1) AS weight FROM categories c LEFT JOIN module_category_settings mcs ON mcs.category_id=c.id AND mcs.module_id=c.module_id WHERE c.module_id=:module AND c.active=1 ORDER BY c.display_order,c.id');
         $stmt->execute(['module'=>$moduleId]);
-        $rows=$stmt->fetchAll(PDO::FETCH_ASSOC);
-        if(!$rows) throw new RuntimeException('Aucune catégorie active pour ce module.');
+        $rows=array_values(array_filter(
+            $stmt->fetchAll(PDO::FETCH_ASSOC),
+            static fn(array $r): bool => (int)$r['weight'] > 0
+        ));
+        if(!$rows) throw new RuntimeException('Aucune catégorie avec un quota positif pour ce module.');
         $totalWeight=array_sum(array_map(static fn(array $r):int=>(int)$r['weight'],$rows));
+        if($totalWeight<1) throw new RuntimeException('La répartition des catégories est invalide.');
         $allocation=[];$remainders=[];$assigned=0;
         foreach($rows as $row){
             $raw=$questionCount*((int)$row['weight']/$totalWeight);
@@ -254,32 +258,80 @@ final class GameService
 
     public function submit(int $attemptId,int $studentId,array $input): array
     {
-        $question=$this->currentQuestion($attemptId,$studentId);$attempt=$question['attempt'];$type=(string)$question['type'];
-        $answerStmt=$this->db->prepare('SELECT id,answer,is_correct FROM question_answers WHERE question_id=:question ORDER BY display_order,id');$answerStmt->execute(['question'=>$question['id']]);$answers=$answerStmt->fetchAll(PDO::FETCH_ASSOC);$isCorrect=false;$answerId=null;$shortAnswer=null;
-        if($type==='qcm'||$type==='true_false'){$answerId=(int)($input['answer_id']??0);foreach($answers as $a)if((int)$a['id']===$answerId){$isCorrect=(int)$a['is_correct']===1;break;}if($answerId<1)throw new RuntimeException('Choisis une réponse.');}
-        elseif($type==='multiple'){$selected=array_values(array_unique(array_map('intval',(array)($input['answer_ids']??[]))));sort($selected);$correctIds=[];$allowedIds=[];foreach($answers as $a){$allowedIds[]=(int)$a['id'];if((int)$a['is_correct']===1)$correctIds[]=(int)$a['id'];}sort($correctIds);foreach($selected as $sid)if(!in_array($sid,$allowedIds,true))throw new RuntimeException('Réponse invalide.');if(!$selected)throw new RuntimeException('Choisis au moins une réponse.');$isCorrect=$selected===$correctIds;$shortAnswer=json_encode($selected,JSON_THROW_ON_ERROR);}
-        elseif($type==='short'){$shortAnswer=trim((string)($input['short_answer']??''));if($shortAnswer==='')throw new RuntimeException('Saisis une réponse.');$normalized=mb_strtolower($shortAnswer);foreach($answers as $a)if((int)$a['is_correct']===1&&mb_strtolower(trim((string)$a['answer']))===$normalized){$isCorrect=true;break;}}
-
-        $this->db->beginTransaction();
+        $this->db->exec('BEGIN IMMEDIATE');
         try{
+            $question=$this->currentQuestion($attemptId,$studentId);
+            $attempt=$question['attempt'];
+            $expectedQuestionId=filter_var($input['attempt_question_id']??null,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
+            if($expectedQuestionId===false || (int)$expectedQuestionId!==(int)$question['attempt_question_id']){
+                throw new RuntimeException('Cette question a déjà été traitée. Recharge la page pour continuer.');
+            }
+
+            $type=(string)$question['type'];
+            $answerStmt=$this->db->prepare('SELECT id,answer,is_correct FROM question_answers WHERE question_id=:question ORDER BY display_order,id');
+            $answerStmt->execute(['question'=>$question['id']]);
+            $answers=$answerStmt->fetchAll(PDO::FETCH_ASSOC);
+            $isCorrect=false;$answerId=null;$shortAnswer=null;
+
+            if($type==='qcm'||$type==='true_false'){
+                $answerId=(int)($input['answer_id']??0);
+                if($answerId<1) throw new RuntimeException('Choisis une réponse.');
+                $found=false;
+                foreach($answers as $a){
+                    if((int)$a['id']===$answerId){$found=true;$isCorrect=(int)$a['is_correct']===1;break;}
+                }
+                if(!$found) throw new RuntimeException('Réponse invalide pour cette question.');
+            }
+            elseif($type==='multiple'){
+                $selected=array_values(array_unique(array_map('intval',(array)($input['answer_ids']??[]))));sort($selected);$correctIds=[];$allowedIds=[];
+                foreach($answers as $a){$allowedIds[]=(int)$a['id'];if((int)$a['is_correct']===1)$correctIds[]=(int)$a['id'];}
+                sort($correctIds);foreach($selected as $sid)if(!in_array($sid,$allowedIds,true))throw new RuntimeException('Réponse invalide.');
+                if(!$selected)throw new RuntimeException('Choisis au moins une réponse.');
+                $isCorrect=$selected===$correctIds;$shortAnswer=json_encode($selected,JSON_THROW_ON_ERROR);
+            }
+            elseif($type==='short'){
+                $shortAnswer=trim((string)($input['short_answer']??''));
+                if($shortAnswer==='')throw new RuntimeException('Saisis une réponse.');
+                $normalized=mb_strtolower($shortAnswer);
+                foreach($answers as $a)if((int)$a['is_correct']===1&&mb_strtolower(trim((string)$a['answer']))===$normalized){$isCorrect=true;break;}
+            }
+
             $log=$this->db->prepare('INSERT INTO attempt_answers(attempt_id,attempt_question_id,answer_id,short_answer,is_correct) VALUES(:attempt,:aq,:answer_id,:short_answer,:correct)');
             $log->execute(['attempt'=>$attemptId,'aq'=>$question['attempt_question_id'],'answer_id'=>$answerId?:null,'short_answer'=>$shortAnswer,'correct'=>$isCorrect?1:0]);
             if($isCorrect){
                 $this->db->prepare('UPDATE attempt_questions SET answered=1,completed=1 WHERE id=:id')->execute(['id'=>$question['attempt_question_id']]);
                 $newScore=(int)$attempt['score']+1;$position=(int)$attempt['current_position'];$total=(int)$attempt['total_questions'];
                 if($position>=$total){
-                    $this->db->prepare('UPDATE attempts SET score=:score,status="completed",finished_at=CURRENT_TIMESTAMP WHERE id=:id')->execute(['score'=>$newScore,'id'=>$attemptId]);
+                    $update=$this->db->prepare('UPDATE attempts SET score=:score,status="completed",finished_at=CURRENT_TIMESTAMP WHERE id=:id AND student_id=:student AND status="in_progress" AND current_position=:position');
+                    $update->execute(['score'=>$newScore,'id'=>$attemptId,'student'=>$studentId,'position'=>$position]);
+                    if($update->rowCount()!==1) throw new RuntimeException('Cette tentative a déjà été modifiée. Recharge la page.');
                     $this->awardPathBadge($studentId,(int)$attempt['path_id'],$attemptId);
-                    $this->db->commit();return['correct'=>true,'status'=>'completed','attempt_id'=>$attemptId];
+                    $this->db->exec('COMMIT');return['correct'=>true,'status'=>'completed','attempt_id'=>$attemptId];
                 }
-                $this->db->prepare('UPDATE attempts SET score=:score,current_position=current_position+1 WHERE id=:id')->execute(['score'=>$newScore,'id'=>$attemptId]);
-                $this->db->commit();return['correct'=>true,'status'=>'in_progress','attempt_id'=>$attemptId];
+                $update=$this->db->prepare('UPDATE attempts SET score=:score,current_position=current_position+1 WHERE id=:id AND student_id=:student AND status="in_progress" AND current_position=:position');
+                $update->execute(['score'=>$newScore,'id'=>$attemptId,'student'=>$studentId,'position'=>$position]);
+                if($update->rowCount()!==1) throw new RuntimeException('Cette tentative a déjà été modifiée. Recharge la page.');
+                $this->db->exec('COMMIT');return['correct'=>true,'status'=>'in_progress','attempt_id'=>$attemptId];
             }
+
             $newLives=max(0,(int)$attempt['lives']-1);
             $this->db->prepare('UPDATE attempt_questions SET answered=1,wrong_answers=wrong_answers+1 WHERE id=:id')->execute(['id'=>$question['attempt_question_id']]);
-            if($newLives===0){$this->db->prepare('UPDATE attempts SET lives=0,status="game_over",finished_at=CURRENT_TIMESTAMP WHERE id=:id')->execute(['id'=>$attemptId]);$this->db->commit();return['correct'=>false,'status'=>'game_over','attempt_id'=>$attemptId];}
-            $this->db->prepare('UPDATE attempts SET lives=:lives WHERE id=:id')->execute(['lives'=>$newLives,'id'=>$attemptId]);$this->db->commit();return['correct'=>false,'status'=>'in_progress','attempt_id'=>$attemptId,'lives'=>$newLives];
-        }catch(\Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
+            if($newLives===0){
+                $update=$this->db->prepare('UPDATE attempts SET lives=0,status="game_over",finished_at=CURRENT_TIMESTAMP WHERE id=:id AND student_id=:student AND status="in_progress" AND current_position=:position AND lives=:old_lives');
+                $update->execute(['id'=>$attemptId,'student'=>$studentId,'position'=>$attempt['current_position'],'old_lives'=>$attempt['lives']]);
+                if($update->rowCount()!==1) throw new RuntimeException('Cette tentative a déjà été modifiée. Recharge la page.');
+                $this->db->exec('COMMIT');return['correct'=>false,'status'=>'game_over','attempt_id'=>$attemptId];
+            }
+            $update=$this->db->prepare('UPDATE attempts SET lives=:lives WHERE id=:id AND student_id=:student AND status="in_progress" AND current_position=:position AND lives=:old_lives');
+            $update->execute(['lives'=>$newLives,'id'=>$attemptId,'student'=>$studentId,'position'=>$attempt['current_position'],'old_lives'=>$attempt['lives']]);
+            if($update->rowCount()!==1) throw new RuntimeException('Cette tentative a déjà été modifiée. Recharge la page.');
+            $this->db->exec('COMMIT');return['correct'=>false,'status'=>'in_progress','attempt_id'=>$attemptId,'lives'=>$newLives];
+        }catch(\Throwable $e){
+            if($this->db->inTransaction()){
+                $this->db->exec('ROLLBACK');
+            }
+            throw $e;
+        }
     }
 
     private function awardPathBadge(int $studentId,int $pathId,int $attemptId): void
