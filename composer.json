@@ -12,6 +12,9 @@
       "App\\": "app/"
     }
   },
+  "scripts": {
+    "check": "php tests/health_check.php"
+  },
   "config": {
     "optimize-autoloader": true,
     "sort-packages": true
