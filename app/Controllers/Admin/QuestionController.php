@@ -16,6 +16,7 @@ use Throwable;
 final class QuestionController
 {
     private const QUESTIONS_PER_PAGE = 50;
+    private const EXCLUSIONS_PER_PAGE = 50;
 
     public function index(): void
     {
@@ -206,7 +207,7 @@ final class QuestionController
                         $stmt->execute(['g'=>$g !== '' ? $g : null,'id'=>$id]);
                     }
                     $db->commit();
-                    $message = 'Groupes d’exclusion enregistrés.';
+                    $message = count($groups) . ' question(s) mise(s) à jour sur cette page.';
                 } catch (Throwable $e) {
                     if ($db->inTransaction()) $db->rollBack();
                     $error = $this->safeError($e, 'exclusions');
@@ -214,19 +215,49 @@ final class QuestionController
             }
         }
 
-        $module = (int)($_GET['module'] ?? 0);
-        $category = (int)($_GET['category'] ?? 0);
-        $sql = 'SELECT q.id,q.question,q.exclusion_group,c.id category_id,c.name category_name,m.id module_id,m.title module_title FROM questions q JOIN categories c ON c.id=q.category_id JOIN modules m ON m.id=c.module_id WHERE q.active=1';
-        $p = [];
-        if ($module > 0) {$sql .= ' AND m.id=:m'; $p['m']=$module;}
-        if ($category > 0) {$sql .= ' AND c.id=:c'; $p['c']=$category;}
-        $sql .= ' ORDER BY m.display_order,c.display_order,q.id';
-        $s = $db->prepare($sql);
-        $s->execute($p);
-        $questions = $s->fetchAll(PDO::FETCH_ASSOC);
+        $module = max(0, (int)($_GET['module'] ?? 0));
+        $category = max(0, (int)($_GET['category'] ?? 0));
+        $search = trim((string)($_GET['q'] ?? ''));
+        $page = max(1, (int)($_GET['page'] ?? 1));
+
+        $from = ' FROM questions q JOIN categories c ON c.id=q.category_id JOIN modules m ON m.id=c.module_id WHERE q.active=1';
+        $where = '';
+        $params = [];
+        if ($module > 0) {
+            $where .= ' AND m.id=:m';
+            $params['m'] = $module;
+        }
+        if ($category > 0) {
+            $where .= ' AND c.id=:c';
+            $params['c'] = $category;
+        }
+        if ($search !== '') {
+            $where .= ' AND (q.question LIKE :search OR q.exclusion_group LIKE :search)';
+            $params['search'] = '%' . $search . '%';
+        }
+
+        $countStmt = $db->prepare('SELECT COUNT(*)' . $from . $where);
+        $countStmt->execute($params);
+        $totalRows = (int)$countStmt->fetchColumn();
+        $totalPages = max(1, (int)ceil($totalRows / self::EXCLUSIONS_PER_PAGE));
+        $page = min($page, $totalPages);
+        $offset = ($page - 1) * self::EXCLUSIONS_PER_PAGE;
+
+        $sql = 'SELECT q.id,q.question,q.exclusion_group,c.id category_id,c.name category_name,m.id module_id,m.title module_title'
+             . $from . $where
+             . ' ORDER BY m.display_order,c.display_order,q.id'
+             . ' LIMIT ' . self::EXCLUSIONS_PER_PAGE . ' OFFSET ' . $offset;
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        $questions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
         $modules = $db->query('SELECT id,title FROM modules ORDER BY display_order,id')->fetchAll(PDO::FETCH_ASSOC);
         $categories = $db->query('SELECT c.id,c.name,m.title module_title FROM categories c JOIN modules m ON m.id=c.module_id WHERE c.active=1 ORDER BY m.display_order,c.display_order,c.id')->fetchAll(PDO::FETCH_ASSOC);
-        View::render('admin/questions/exclusions', compact('message','error','module','category','questions','modules','categories'));
+
+        View::render('admin/questions/exclusions', compact(
+            'message','error','module','category','search','questions','modules','categories',
+            'page','totalPages','totalRows'
+        ));
     }
 
     public function import(): void
