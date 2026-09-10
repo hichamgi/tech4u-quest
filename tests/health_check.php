@@ -2,8 +2,6 @@
 declare(strict_types=1);
 
 use App\Core\Database;
-use PDO;
-use Throwable;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -26,7 +24,7 @@ try {
     $integrity = (string)$db->query('PRAGMA integrity_check')->fetchColumn();
     $check($integrity === 'ok', 'SQLite integrity_check', $integrity);
 
-    $foreignKeys = $db->query('PRAGMA foreign_key_check')->fetchAll(PDO::FETCH_ASSOC);
+    $foreignKeys = $db->query('PRAGMA foreign_key_check')->fetchAll(\PDO::FETCH_ASSOC);
     $check($foreignKeys === [], 'SQLite foreign_key_check', $foreignKeys === [] ? null : count($foreignKeys) . ' anomalie(s)');
 
     $requiredMigrations = [
@@ -83,7 +81,7 @@ try {
         "SELECT name FROM sqlite_master WHERE type='table' AND name='login_rate_limits' LIMIT 1"
     )->fetchColumn();
     $check($rateLimitTable === 'login_rate_limits', 'Table de limitation des connexions présente');
-} catch (Throwable $e) {
+} catch (\Throwable $e) {
     $failures[] = 'Exception pendant le contrôle : ' . $e->getMessage();
     fwrite(STDERR, '[FAIL] ' . end($failures) . "\n");
 }
