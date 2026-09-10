@@ -5,6 +5,7 @@ namespace App\Controllers\Admin;
 
 use App\Core\Auth;
 use App\Core\Database;
+use App\Core\Logger;
 use App\Core\Url;
 use App\Core\View;
 use PDO;
@@ -155,7 +156,6 @@ final class ModuleController
                         ]);
                     }
 
-                    // Les badges de parcours sont obligatoires : ils pilotent le déblocage des niveaux suivants.
                     $stmt = $db->prepare(
                         'UPDATE module_settings
                          SET question_count=:count,initial_lives=3,badge_enabled=1
@@ -168,11 +168,17 @@ final class ModuleController
 
                     $db->commit();
                     $message = 'Configuration enregistrée.';
-                } catch (Throwable $e) {
+                } catch (RuntimeException $e) {
                     if ($db->inTransaction()) {
                         $db->rollBack();
                     }
                     $error = $e->getMessage();
+                } catch (Throwable $e) {
+                    if ($db->inTransaction()) {
+                        $db->rollBack();
+                    }
+                    Logger::exception($e, ['controller' => self::class, 'action' => 'index']);
+                    $error = 'Impossible d’enregistrer la configuration du module pour le moment.';
                 }
             }
         }
