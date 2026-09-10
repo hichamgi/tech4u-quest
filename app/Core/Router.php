@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Core;
 
 use RuntimeException;
+use Throwable;
 
 final class Router
 {
@@ -46,11 +47,9 @@ final class Router
             $path = '/';
         }
 
-        foreach ($this->routes as $route) {
-            if ($route['method'] !== $method) {
-                continue;
-            }
+        $allowedMethods = [];
 
+        foreach ($this->routes as $route) {
             $regex = preg_replace(
                 '#\{([A-Za-z_][A-Za-z0-9_]*)\}#',
                 '(?P<$1>[^/]+)',
@@ -65,6 +64,11 @@ final class Router
                 continue;
             }
 
+            $allowedMethods[] = $route['method'];
+            if ($route['method'] !== $method) {
+                continue;
+            }
+
             $params = [];
             foreach ($matches as $key => $value) {
                 if (is_string($key)) {
@@ -72,7 +76,27 @@ final class Router
                 }
             }
 
-            $this->invoke($route['handler'], $params);
+            try {
+                $this->invoke($route['handler'], $params);
+            } catch (Throwable $e) {
+                Logger::exception($e, [
+                    'method' => $method,
+                    'path' => $path,
+                ]);
+                if (!headers_sent()) {
+                    http_response_code(500);
+                    header('Content-Type: text/plain; charset=UTF-8');
+                }
+                echo 'Une erreur interne est survenue. Réessaie dans quelques instants.';
+            }
+            return;
+        }
+
+        if ($allowedMethods !== []) {
+            $allowedMethods = array_values(array_unique($allowedMethods));
+            http_response_code(405);
+            header('Allow: ' . implode(', ', $allowedMethods));
+            echo '405 - Méthode non autorisée';
             return;
         }
 
