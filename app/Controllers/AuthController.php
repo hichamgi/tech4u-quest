@@ -103,6 +103,22 @@ final class AuthController
 
     public function logout(): void
     {
+        Auth::boot();
+
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+            http_response_code(405);
+            header('Allow: POST');
+            header('Location: ' . Url::to());
+            exit;
+        }
+
+        $csrf = $_POST['csrf_token'] ?? null;
+        if (!Auth::validateCsrf(is_string($csrf) ? $csrf : null)) {
+            http_response_code(419);
+            echo 'Session expirée. Recharge la page puis réessaie.';
+            return;
+        }
+
         Auth::logout();
         header('Location: ' . Url::to());
         exit;
