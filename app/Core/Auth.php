@@ -110,8 +110,9 @@ final class Auth
 
     public static function requireAdmin(string $loginPath = '../login.php'): array
     {
-        $user = self::user();
-        if (!$user || ($user['type'] ?? null) !== 'staff' || ($user['role'] ?? null) !== 'admin') {
+        $user = self::refreshProtectedSession('staff');
+        if (!$user || ($user['role'] ?? null) !== 'admin') {
+            self::invalidateCurrentUser();
             header('Location: ' . $loginPath);
             exit;
         }
@@ -123,8 +124,9 @@ final class Auth
         string $passwordChangePath = 'change-password.php',
         bool $allowPendingPasswordChange = false
     ): array {
-        $user = self::user();
-        if (!$user || ($user['type'] ?? null) !== 'student') {
+        $user = self::refreshProtectedSession('student');
+        if (!$user) {
+            self::invalidateCurrentUser();
             header('Location: ' . $loginPath);
             exit;
         }
@@ -173,5 +175,58 @@ final class Auth
         return is_string($token)
             && isset($_SESSION['csrf_token'])
             && hash_equals((string)$_SESSION['csrf_token'], $token);
+    }
+
+    private static function refreshProtectedSession(string $expectedType): ?array
+    {
+        $sessionUser = self::user();
+        if (!$sessionUser || ($sessionUser['type'] ?? null) !== $expectedType) {
+            return null;
+        }
+
+        $id = (int)($sessionUser['id'] ?? 0);
+        $login = (string)($sessionUser['login'] ?? '');
+        if ($id < 1 || $login === '') {
+            return null;
+        }
+
+        $db = Database::connection();
+
+        if ($expectedType === 'staff') {
+            $record = (new User($db))->findForAuthentication($login);
+            if (!$record || (int)$record['id'] !== $id || (int)$record['active'] !== 1) {
+                return null;
+            }
+
+            $_SESSION[self::SESSION_KEY] = [
+                'type' => 'staff',
+                'id' => (int)$record['id'],
+                'login' => (string)$record['login'],
+                'role' => (string)$record['role'],
+            ];
+            return $_SESSION[self::SESSION_KEY];
+        }
+
+        $record = (new Student($db))->findForAuthentication($login);
+        if (!$record || (int)$record['id'] !== $id || (int)$record['active'] !== 1) {
+            return null;
+        }
+
+        $_SESSION[self::SESSION_KEY] = [
+            'type' => 'student',
+            'id' => (int)$record['id'],
+            'login' => (string)$record['login'],
+            'class_code' => (string)$record['class_code'],
+            'student_number' => (int)$record['student_number'],
+            'must_change_password' => (int)$record['must_change_password'] === 1,
+        ];
+        return $_SESSION[self::SESSION_KEY];
+    }
+
+    private static function invalidateCurrentUser(): void
+    {
+        self::boot();
+        unset($_SESSION[self::SESSION_KEY]);
+        session_regenerate_id(true);
     }
 }
