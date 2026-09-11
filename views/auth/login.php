@@ -25,7 +25,7 @@ function e(string $value): string
         <p>Connecte-toi pour retrouver ton espace Tech4U-QUEST.</p>
 
         <?php if ($error !== ''): ?>
-            <div class="demo-note" style="border-color:#ef4444;color:#fecaca;margin-bottom:1rem;">
+            <div class="demo-note demo-note-error">
                 <?= e((string)$error) ?>
             </div>
         <?php endif; ?>
