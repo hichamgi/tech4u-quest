@@ -27,7 +27,7 @@ function e(string $value): string
         <p><strong>Compte :</strong> <?= e((string)$student['login']) ?></p>
 
         <?php if ($error !== ''): ?>
-            <div class="demo-note" style="border-color:#ef4444;color:#fecaca;margin-bottom:1rem;">
+            <div class="demo-note demo-note-error">
                 <?= e($error) ?>
             </div>
         <?php endif; ?>
@@ -51,8 +51,11 @@ function e(string $value): string
             <button class="btn btn-primary" type="submit">Enregistrer et continuer →</button>
         </form>
 
-        <div style="margin-top:1rem;text-align:center">
-            <a class="btn btn-secondary" href="<?= e(Url::to('logout')) ?>">Se déconnecter</a>
+        <div class="login-actions">
+            <form method="post" action="<?= e(Url::to('logout')) ?>">
+                <input type="hidden" name="csrf_token" value="<?= e($csrfToken) ?>">
+                <button class="btn btn-secondary" type="submit">Se déconnecter</button>
+            </form>
         </div>
     </section>
 </main>
