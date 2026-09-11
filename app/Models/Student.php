@@ -22,6 +22,68 @@ final class Student
         return $classCode . '-' . $studentNumber;
     }
 
+    public function findForAuthentication(string $identifier): ?array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT id, login_code AS login, class_code, student_number, password_hash,
+                    must_change_password, active
+             FROM students
+             WHERE login_code = :identifier
+             LIMIT 1'
+        );
+        $stmt->execute(['identifier' => strtoupper(trim($identifier))]);
+        $student = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $student ?: null;
+    }
+
+    public function activePasswordHash(int $studentId): ?string
+    {
+        $stmt = $this->db->prepare(
+            'SELECT password_hash
+             FROM students
+             WHERE id = :id AND active = 1
+             LIMIT 1'
+        );
+        $stmt->execute(['id' => $studentId]);
+        $hash = $stmt->fetchColumn();
+
+        return $hash === false ? null : (string)$hash;
+    }
+
+    public function isDemo(int $studentId): bool
+    {
+        $stmt = $this->db->prepare('SELECT UPPER(TRIM(class_code)) FROM students WHERE id = :id LIMIT 1');
+        $stmt->execute(['id' => $studentId]);
+
+        return (string)$stmt->fetchColumn() === 'DEMO';
+    }
+
+    public function badgeCount(int $studentId): int
+    {
+        $stmt = $this->db->prepare('SELECT COUNT(*) FROM student_path_badges WHERE student_id = :student');
+        $stmt->execute(['student' => $studentId]);
+
+        return (int)$stmt->fetchColumn();
+    }
+
+    public function badges(int $studentId): array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT pb.icon,pb.name,pb.description,spb.obtained_at,
+                    m.title AS module_title,p.name AS path_name
+             FROM student_path_badges spb
+             JOIN path_badges pb ON pb.id = spb.badge_id
+             JOIN module_paths p ON p.id = pb.path_id
+             JOIN modules m ON m.id = pb.module_id
+             WHERE spb.student_id = :student
+             ORDER BY spb.obtained_at DESC, p.display_order DESC'
+        );
+        $stmt->execute(['student' => $studentId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     /**
      * Create or synchronize a Tech4U student from the local MySQL database.
      * The numeric ID is provided by MySQL and must remain stable.
