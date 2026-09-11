@@ -42,6 +42,34 @@ final class Module
         return (int)$stmt->fetchColumn();
     }
 
+    /**
+     * Return every active question that can participate in a configured draw.
+     * exclusion_group is intentionally kept raw here: the service validates
+     * uniqueness across all categories of the module, not category by category.
+     */
+    public function questionAvailability(int $moduleId, array $categoryIds): array
+    {
+        $categoryIds = array_values(array_unique(array_filter(
+            array_map('intval', $categoryIds),
+            static fn(int $id): bool => $id > 0
+        )));
+        if ($categoryIds === []) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($categoryIds), '?'));
+        $sql = 'SELECT q.id,q.category_id,q.exclusion_group
+                FROM questions q
+                JOIN categories c ON c.id=q.category_id
+                WHERE c.module_id=? AND c.active=1 AND q.active=1
+                  AND q.category_id IN (' . $placeholders . ')
+                ORDER BY q.category_id,q.id';
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute(array_merge([$moduleId], $categoryIds));
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function paths(int $moduleId): array
     {
         $stmt = $this->db->prepare(
