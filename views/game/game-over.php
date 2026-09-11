@@ -33,7 +33,7 @@ function e(string $value): string
         <h3><?= e((string)$attempt['module_title']) ?></h3>
         <?php if (!empty($attempt['path_name'])): ?><div class="chip"><?= e((string)($attempt['path_icon'] ?: '🎯')) ?> <?= e((string)$attempt['path_name']) ?></div><?php endif; ?>
         <div class="score-big"><?= (int)$attempt['score'] ?> / <?= (int)$attempt['total_questions'] ?></div>
-        <div class="hero-actions" style="justify-content:center">
+        <div class="hero-actions pagination-center">
             <a class="btn btn-primary" href="<?= e(Url::to('module/' . (int)$attempt['module_id'])) ?>">↻ Nouvelle tentative</a>
             <a class="btn btn-secondary" href="<?= e(Url::to('dashboard')) ?>">Retour aux modules</a>
         </div>
