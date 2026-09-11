@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace App\Controllers\Admin;
 
 use App\Core\Auth;
-use App\Core\Database;
 use App\Core\Logger;
 use App\Core\Url;
 use App\Core\View;
@@ -16,10 +15,13 @@ final class QuestionExclusionController
 {
     private const PER_PAGE = 50;
 
+    public function __construct(private Question $model)
+    {
+    }
+
     public function index(): void
     {
         Auth::requireAdmin(Url::to('login'));
-        $model = new Question(Database::connection());
         $message = $error = null;
 
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
@@ -31,7 +33,7 @@ final class QuestionExclusionController
                     if (!is_array($groups)) {
                         throw new RuntimeException('Données invalides.');
                     }
-                    $updated = $model->updateExclusionGroups($groups);
+                    $updated = $this->model->updateExclusionGroups($groups);
                     $message = $updated . ' question(s) mise(s) à jour sur cette page.';
                 } catch (Throwable $e) {
                     $error = $this->safeError($e, 'update');
@@ -45,7 +47,7 @@ final class QuestionExclusionController
         $page = max(1, (int)($_GET['page'] ?? 1));
 
         try {
-            $result = $model->paginateExclusions([
+            $result = $this->model->paginateExclusions([
                 'module' => $module,
                 'category' => $category,
                 'search' => $search,
@@ -54,8 +56,8 @@ final class QuestionExclusionController
             $page = $result['page'];
             $totalPages = $result['totalPages'];
             $totalRows = $result['totalRows'];
-            $modules = $model->modules();
-            $categories = $model->categories(true);
+            $modules = $this->model->modules();
+            $categories = $this->model->categories(true);
         } catch (Throwable $e) {
             Logger::exception($e, ['controller' => self::class, 'action' => 'load']);
             $questions = [];
