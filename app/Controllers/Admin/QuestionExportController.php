@@ -4,12 +4,15 @@ declare(strict_types=1);
 namespace App\Controllers\Admin;
 
 use App\Core\Auth;
-use App\Core\Database;
 use App\Core\Url;
 use App\Models\Question;
 
 final class QuestionExportController
 {
+    public function __construct(private Question $model)
+    {
+    }
+
     public function template(): void
     {
         Auth::requireAdmin(Url::to('login'));
@@ -22,7 +25,6 @@ final class QuestionExportController
     public function export(): void
     {
         Auth::requireAdmin(Url::to('login'));
-        $model = new Question(Database::connection());
         header('Content-Type:text/csv; charset=UTF-8');
         header('Content-Disposition:attachment; filename="tech4u-questions.csv"');
         $out = fopen('php://output', 'wb');
@@ -35,7 +37,7 @@ final class QuestionExportController
         }
         fputcsv($out, $header, ';', '"', '\\');
 
-        foreach ($model->exportRows() as $question) {
+        foreach ($this->model->exportRows() as $question) {
             $row = [
                 $question['id'],
                 $question['module_id'],
@@ -62,13 +64,12 @@ final class QuestionExportController
     public function reference(): void
     {
         Auth::requireAdmin(Url::to('login'));
-        $model = new Question(Database::connection());
         header('Content-Type:text/csv; charset=UTF-8');
         header('Content-Disposition:attachment; filename="modules_categories.csv"');
         $out = fopen('php://output', 'wb');
         fwrite($out, "\xEF\xBB\xBF");
         fputcsv($out, ['module_id','module','category_id','category','recommended_bank_size'], ';', '"', '\\');
-        foreach ($model->referenceRows() as $row) {
+        foreach ($this->model->referenceRows() as $row) {
             fputcsv($out, $row, ';', '"', '\\');
         }
         fclose($out);
