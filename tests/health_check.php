@@ -30,6 +30,8 @@ try {
     $requiredMigrations = [
         '2026-09-10_progression_schema_v1',
         '2026-09-10_login_rate_limit_v1',
+        '2026-09-11_unique_in_progress_attempt_v1',
+        '2026-09-11_remove_unused_question_settings_v1',
     ];
     $migrationStmt = $db->prepare('SELECT 1 FROM schema_migrations WHERE version=:version LIMIT 1');
     foreach ($requiredMigrations as $version) {
@@ -51,14 +53,24 @@ try {
 
     $duplicateAttempts = (int)$db->query(
         "SELECT COUNT(*) FROM (
-            SELECT student_id,module_id,path_id
+            SELECT student_id,path_id
             FROM attempts
-            WHERE status='in_progress'
-            GROUP BY student_id,module_id,path_id
+            WHERE status='in_progress' AND path_id IS NOT NULL
+            GROUP BY student_id,path_id
             HAVING COUNT(*) > 1
         )"
     )->fetchColumn();
     $check($duplicateAttempts === 0, 'Aucune double tentative active', 'doublons : ' . $duplicateAttempts);
+
+    $activeAttemptIndex = (string)$db->query(
+        "SELECT name FROM sqlite_master
+         WHERE type='index' AND name='uniq_attempts_in_progress_student_path'
+         LIMIT 1"
+    )->fetchColumn();
+    $check(
+        $activeAttemptIndex === 'uniq_attempts_in_progress_student_path',
+        'Index UNIQUE des tentatives actives présent'
+    );
 
     $missingBadges = (int)$db->query(
         'SELECT COUNT(*)
@@ -81,6 +93,16 @@ try {
         "SELECT name FROM sqlite_master WHERE type='table' AND name='login_rate_limits' LIMIT 1"
     )->fetchColumn();
     $check($rateLimitTable === 'login_rate_limits', 'Table de limitation des connexions présente');
+
+    $obsoleteSettings = (int)$db->query(
+        "SELECT COUNT(*) FROM settings
+         WHERE key IN (
+            'default_question_type',
+            'difficulty_1_weight','difficulty_2_weight','difficulty_3_weight',
+            'difficulty_4_weight','difficulty_5_weight'
+         )"
+    )->fetchColumn();
+    $check($obsoleteSettings === 0, 'Paramètres de questions obsolètes supprimés', 'restants : ' . $obsoleteSettings);
 } catch (\Throwable $e) {
     $failures[] = 'Exception pendant le contrôle : ' . $e->getMessage();
     fwrite(STDERR, '[FAIL] ' . end($failures) . "\n");
