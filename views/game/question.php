@@ -21,7 +21,7 @@ function e(string $value): string
 <header class="site-header"><div class="container nav"><a class="brand" href="<?= e(Url::to('dashboard')) ?>"><span class="brand-mark">⚡</span><span>Tech4U <b>QUEST</b></span></a><?php if ($data): ?><div class="lives" aria-label="<?= (int)$data['attempt']['lives'] ?> vies"><?= str_repeat('♥ ', (int)$data['attempt']['lives']) ?></div><?php endif; ?></div></header>
 <main class="container page">
 <?php if ($error): ?>
-<div class="card card-pad" style="border-color:#fb7185"><strong><?= e((string)$error) ?></strong><div style="margin-top:1rem"><a class="btn btn-secondary" href="<?= e(Url::to('dashboard')) ?>">Retour au tableau de bord</a></div></div>
+<div class="card card-pad notice-error"><strong><?= e((string)$error) ?></strong><div class="form-actions"><a class="btn btn-secondary" href="<?= e(Url::to('dashboard')) ?>">Retour au tableau de bord</a></div></div>
 <?php elseif ($data):
 $attempt = $data['attempt'];
 $position = (int)$data['position'];
@@ -33,23 +33,23 @@ $isCodeQuestion = str_contains($questionText, "\n") || preg_match('/(^|\n)\s*\d+
 <div class="quest-layout"><section class="card quest-card">
 <div class="question-meta"><span class="chip"><?= e((string)$data['category_name']) ?></span><strong>Question <?= $position ?> / <?= $total ?></strong></div>
 <div class="progress"><span style="width:<?= $percent ?>%"></span></div>
-<?php if ($feedback): ?><div class="card" style="padding:.9rem;margin:1rem 0;border-color:#f59e0b"><strong><?= e((string)$feedback) ?></strong></div><?php endif; ?>
+<?php if ($feedback): ?><div class="card notice" style="border-color:#f59e0b"><strong><?= e((string)$feedback) ?></strong></div><?php endif; ?>
 <h1 class="question-title<?= $isCodeQuestion ? ' code-question' : '' ?>"><?= e($questionText) ?></h1>
 <form method="post" action="<?= e(Url::to('question/' . $attemptId)) ?>">
 <input type="hidden" name="csrf_token" value="<?= e((string)$csrfToken) ?>">
 <input type="hidden" name="attempt_question_id" value="<?= (int)$data['attempt_question_id'] ?>">
 <div class="answers">
 <?php if (in_array($data['type'], ['qcm','true_false'], true)): ?>
-<?php foreach ($data['answers'] as $i => $a): ?><label class="answer" style="cursor:pointer"><input type="radio" name="answer_id" value="<?= (int)$a['id'] ?>" required style="margin-right:.8rem"><span class="answer-key"><?= chr(65 + $i) ?></span><span><?= e((string)$a['answer']) ?></span></label><?php endforeach; ?>
+<?php foreach ($data['answers'] as $i => $a): ?><label class="answer"><input type="radio" name="answer_id" value="<?= (int)$a['id'] ?>" required><span class="answer-key"><?= chr(65 + $i) ?></span><span><?= e((string)$a['answer']) ?></span></label><?php endforeach; ?>
 <?php elseif ($data['type'] === 'multiple'): ?>
-<p style="color:var(--muted)">Plusieurs réponses peuvent être correctes.</p><?php foreach ($data['answers'] as $i => $a): ?><label class="answer" style="cursor:pointer"><input type="checkbox" name="answer_ids[]" value="<?= (int)$a['id'] ?>" style="margin-right:.8rem"><span class="answer-key"><?= chr(65 + $i) ?></span><span><?= e((string)$a['answer']) ?></span></label><?php endforeach; ?>
+<p class="muted-copy">Plusieurs réponses peuvent être correctes.</p><?php foreach ($data['answers'] as $i => $a): ?><label class="answer"><input type="checkbox" name="answer_ids[]" value="<?= (int)$a['id'] ?>"><span class="answer-key"><?= chr(65 + $i) ?></span><span><?= e((string)$a['answer']) ?></span></label><?php endforeach; ?>
 <?php else: ?>
 <div class="form-group"><label class="label" for="short_answer">Ta réponse</label><input class="input" id="short_answer" name="short_answer" autocomplete="off" required></div>
 <?php endif; ?>
 </div>
-<button class="btn btn-primary" type="submit" style="margin-top:1rem">Valider ma réponse</button>
+<div class="form-actions"><button class="btn btn-primary" type="submit">Valider ma réponse</button></div>
 </form>
-</section><aside class="side-stack"><div class="card side-card"><h3>Progression</h3><div class="score-big" style="font-size:42px;margin:8px 0"><?= (int)$attempt['score'] ?> / <?= $total ?></div><p style="color:var(--muted)"><?= (int)$attempt['lives'] ?> vie(s) restante(s).</p></div><div class="card side-card"><h3>Règle</h3><p style="color:var(--muted);line-height:1.6">Une mauvaise réponse = −1 vie. La question reste affichée jusqu’à la bonne réponse ou jusqu’à épuisement des vies.</p></div></aside></div>
+</section><aside class="side-stack"><div class="card side-card"><h3>Progression</h3><div class="score-big" style="font-size:42px;margin:8px 0"><?= (int)$attempt['score'] ?> / <?= $total ?></div><p class="muted-copy"><?= (int)$attempt['lives'] ?> vie(s) restante(s).</p></div><div class="card side-card"><h3>Règle</h3><p class="muted-copy">Une mauvaise réponse = −1 vie. La question reste affichée jusqu’à la bonne réponse ou jusqu’à épuisement des vies.</p></div></aside></div>
 <?php endif; ?>
 </main>
 <?php require dirname(__DIR__) . '/_copyright.php'; ?>
