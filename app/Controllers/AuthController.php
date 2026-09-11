@@ -8,6 +8,7 @@ use App\Core\Database;
 use App\Core\Logger;
 use App\Core\Url;
 use App\Core\View;
+use App\Models\Student;
 use App\Services\LoginRateLimiter;
 use Throwable;
 
@@ -85,28 +86,15 @@ final class AuthController
                 $error = 'Les deux mots de passe ne correspondent pas.';
             } else {
                 try {
-                    $db = Database::connection();
-                    $stmt = $db->prepare('SELECT password_hash FROM students WHERE id = :id AND active = 1 LIMIT 1');
-                    $stmt->execute(['id' => (int)$student['id']]);
-                    $currentHash = $stmt->fetchColumn();
+                    $studentModel = new Student(Database::connection());
+                    $currentHash = $studentModel->activePasswordHash((int)$student['id']);
 
-                    if (!$currentHash) {
+                    if ($currentHash === null) {
                         $error = 'Compte élève introuvable.';
-                    } elseif (password_verify($newPassword, (string)$currentHash)) {
+                    } elseif (password_verify($newPassword, $currentHash)) {
                         $error = 'Choisis un mot de passe différent du mot de passe provisoire.';
                     } else {
-                        $update = $db->prepare(
-                            'UPDATE students
-                             SET password_hash = :password_hash,
-                                 must_change_password = 0,
-                                 updated_at = CURRENT_TIMESTAMP
-                             WHERE id = :id'
-                        );
-                        $update->execute([
-                            'password_hash' => password_hash($newPassword, PASSWORD_DEFAULT),
-                            'id' => (int)$student['id'],
-                        ]);
-
+                        $studentModel->setPassword((int)$student['id'], $newPassword, false);
                         Auth::markStudentPasswordChanged();
                         header('Location: ' . Url::to('dashboard'));
                         exit;
