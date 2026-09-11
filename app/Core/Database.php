@@ -22,16 +22,33 @@ final class Database
         $path = $config['database'];
         self::initializeIfMissing($path, $root . '/database/schema.sql');
 
-        self::$pdo = new PDO('sqlite:' . $path, null, null, [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        ]);
-        self::$pdo->exec('PRAGMA foreign_keys = ON;');
-        self::$pdo->exec('PRAGMA journal_mode = WAL;');
-        self::$pdo->exec('PRAGMA busy_timeout = 5000;');
-        self::migrate(self::$pdo);
-        self::migrateLoginRateLimits(self::$pdo);
-        return self::$pdo;
+        // Every normal DB user keeps a shared process lock for the lifetime of
+        // its PDO connection. Annual archival needs the corresponding exclusive
+        // lock before it is allowed to replace current.sqlite.
+        DatabaseLock::acquireShared($path);
+
+        try {
+            self::$pdo = new PDO('sqlite:' . $path, null, null, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            ]);
+            self::$pdo->exec('PRAGMA foreign_keys = ON;');
+            self::$pdo->exec('PRAGMA journal_mode = WAL;');
+            self::$pdo->exec('PRAGMA busy_timeout = 5000;');
+            self::migrate(self::$pdo);
+            self::migrateLoginRateLimits(self::$pdo);
+            return self::$pdo;
+        } catch (\Throwable $e) {
+            self::$pdo = null;
+            DatabaseLock::releaseShared();
+            throw $e;
+        }
+    }
+
+    public static function disconnect(): void
+    {
+        self::$pdo = null;
+        DatabaseLock::releaseShared();
     }
 
     private static function ensureMigrationTable(PDO $pdo): void
