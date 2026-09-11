@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace App\Controllers\Admin;
 
 use App\Core\Auth;
-use App\Core\Database;
 use App\Core\Logger;
 use App\Core\Url;
 use App\Core\View;
@@ -15,12 +14,15 @@ use Throwable;
 
 final class ModuleController
 {
+    public function __construct(
+        private Module $moduleModel,
+        private ModuleConfigurationService $service
+    ) {
+    }
+
     public function index(): void
     {
         Auth::requireAdmin(Url::to('login'));
-        $db = Database::connection();
-        $moduleModel = new Module($db);
-        $service = new ModuleConfigurationService($db, $moduleModel);
         $message = null;
         $error = null;
 
@@ -43,7 +45,7 @@ final class ModuleController
                         throw new RuntimeException('Quotas de catégories invalides.');
                     }
 
-                    $service->save(
+                    $this->service->save(
                         (int)$moduleId,
                         isset($_POST['module_active']),
                         $categoryCounts
@@ -59,11 +61,11 @@ final class ModuleController
         }
 
         try {
-            $modules = $moduleModel->adminList();
+            $modules = $this->moduleModel->adminList();
             foreach ($modules as &$module) {
                 $moduleId = (int)$module['id'];
-                $module['categories'] = $moduleModel->adminCategories($moduleId);
-                $module['paths'] = $moduleModel->adminPaths($moduleId);
+                $module['categories'] = $this->moduleModel->adminCategories($moduleId);
+                $module['paths'] = $this->moduleModel->adminPaths($moduleId);
             }
             unset($module);
         } catch (Throwable $e) {
