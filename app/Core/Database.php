@@ -10,6 +10,7 @@ final class Database
 {
     private const MIGRATION_VERSION = '2026-09-10_progression_schema_v1';
     private const LOGIN_RATE_LIMIT_MIGRATION_VERSION = '2026-09-10_login_rate_limit_v1';
+    private const ACTIVE_ATTEMPT_MIGRATION_VERSION = '2026-09-11_unique_in_progress_attempt_v1';
 
     private static ?PDO $pdo = null;
 
@@ -22,9 +23,6 @@ final class Database
         $path = $config['database'];
         self::initializeIfMissing($path, $root . '/database/schema.sql');
 
-        // Every normal DB user keeps a shared process lock for the lifetime of
-        // its PDO connection. Annual archival needs the corresponding exclusive
-        // lock before it is allowed to replace current.sqlite.
         DatabaseLock::acquireShared($path);
 
         try {
@@ -37,6 +35,7 @@ final class Database
             self::$pdo->exec('PRAGMA busy_timeout = 5000;');
             self::migrate(self::$pdo);
             self::migrateLoginRateLimits(self::$pdo);
+            self::migrateUniqueInProgressAttempt(self::$pdo);
             return self::$pdo;
         } catch (\Throwable $e) {
             self::$pdo = null;
@@ -258,6 +257,51 @@ final class Database
 
             $mark = $pdo->prepare('INSERT INTO schema_migrations(version) VALUES(:version)');
             $mark->execute(['version' => self::LOGIN_RATE_LIMIT_MIGRATION_VERSION]);
+            $pdo->exec('COMMIT');
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->exec('ROLLBACK');
+            }
+            throw $e;
+        }
+    }
+
+    private static function migrateUniqueInProgressAttempt(PDO $pdo): void
+    {
+        self::ensureMigrationTable($pdo);
+        if (self::migrationApplied($pdo, self::ACTIVE_ATTEMPT_MIGRATION_VERSION)) return;
+
+        $pdo->exec('BEGIN IMMEDIATE');
+        try {
+            if (self::migrationApplied($pdo, self::ACTIVE_ATTEMPT_MIGRATION_VERSION)) {
+                $pdo->exec('COMMIT');
+                return;
+            }
+
+            $duplicates = $pdo->query(
+                "SELECT student_id,path_id,COUNT(*) AS total
+                 FROM attempts
+                 WHERE status='in_progress' AND path_id IS NOT NULL
+                 GROUP BY student_id,path_id
+                 HAVING COUNT(*) > 1
+                 LIMIT 1"
+            )->fetch(PDO::FETCH_ASSOC);
+
+            if ($duplicates) {
+                throw new RuntimeException(
+                    'Impossible d’activer la contrainte des tentatives en cours : ' .
+                    'plusieurs tentatives in_progress existent pour un même élève/parcours.'
+                );
+            }
+
+            $pdo->exec(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uniq_attempts_in_progress_student_path
+                 ON attempts(student_id,path_id)
+                 WHERE status='in_progress' AND path_id IS NOT NULL"
+            );
+
+            $mark = $pdo->prepare('INSERT INTO schema_migrations(version) VALUES(:version)');
+            $mark->execute(['version' => self::ACTIVE_ATTEMPT_MIGRATION_VERSION]);
             $pdo->exec('COMMIT');
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) {
