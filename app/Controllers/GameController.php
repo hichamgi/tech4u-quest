@@ -8,6 +8,7 @@ use App\Core\Database;
 use App\Core\Logger;
 use App\Core\Url;
 use App\Core\View;
+use App\Models\Attempt;
 use App\Services\GameService;
 use PDOException;
 use RuntimeException;
@@ -29,6 +30,7 @@ final class GameController
         try {
             $db = Database::connection();
             $game = new GameService($db);
+            $attemptModel = new Attempt($db);
         } catch (Throwable $e) {
             Logger::exception($e, ['area' => 'game_init', 'attempt_id' => $attemptId]);
             View::render('game/question', [
@@ -46,28 +48,17 @@ final class GameController
         $feedback = null;
 
         try {
-            $moduleAccessStmt = $db->prepare(
-                'SELECT m.active
-                 FROM attempts a
-                 JOIN modules m ON m.id = a.module_id
-                 WHERE a.id = :attempt AND a.student_id = :student
-                 LIMIT 1'
-            );
-            $moduleAccessStmt->execute([
-                'attempt' => $attemptId,
-                'student' => (int)$student['id'],
-            ]);
-            $moduleActive = $moduleAccessStmt->fetchColumn();
+            $moduleActive = $attemptModel->moduleActiveForStudent($attemptId, (int)$student['id']);
         } catch (Throwable $e) {
             Logger::exception($e, ['area' => 'game_access', 'attempt_id' => $attemptId]);
-            $moduleActive = false;
+            $moduleActive = null;
             $error = 'Impossible de charger cette tentative pour le moment.';
         }
 
         if ($error === null) {
-            if ($moduleActive === false) {
+            if ($moduleActive === null) {
                 $error = 'Tentative introuvable.';
-            } elseif ((int)$moduleActive !== 1 && !$isDemo) {
+            } elseif ($moduleActive !== 1 && !$isDemo) {
                 $error = 'Ce module n’est pas encore disponible. Il sera activé après son traitement en classe.';
             }
         }
