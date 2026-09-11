@@ -3,13 +3,18 @@ declare(strict_types=1);
 
 namespace App\Core;
 
-use RuntimeException;
 use Throwable;
 
 final class Router
 {
     /** @var array<int, array{method:string, pattern:string, handler:callable|array}> */
     private array $routes = [];
+    private Container $container;
+
+    public function __construct(?Container $container = null)
+    {
+        $this->container = $container ?? new Container();
+    }
 
     public function get(string $pattern, callable|array $handler): void
     {
@@ -121,13 +126,11 @@ final class Router
     {
         $candidates = [];
 
-        // Apache Alias / ScriptAlias expose souvent CONTEXT_PREFIX.
         $contextPrefix = trim((string)($_SERVER['CONTEXT_PREFIX'] ?? ''));
         if ($contextPrefix !== '') {
             $candidates[] = '/' . trim($contextPrefix, '/');
         }
 
-        // Cas classique : /tech4u-quest/index.php -> /tech4u-quest
         foreach (['SCRIPT_NAME', 'PHP_SELF'] as $key) {
             $scriptName = str_replace('\\', '/', (string)($_SERVER[$key] ?? ''));
             if ($scriptName === '') {
@@ -140,8 +143,6 @@ final class Router
             }
         }
 
-        // Déploiement actuel sous l'Alias Apache /tech4u-quest/.
-        // Ce fallback reste sans effet lorsque l'application est servie à la racine du domaine.
         $candidates[] = '/tech4u-quest';
 
         $candidates = array_values(array_unique($candidates));
@@ -165,7 +166,7 @@ final class Router
     private function invoke(callable|array $handler, array $params): void
     {
         if (is_array($handler) && isset($handler[0], $handler[1]) && is_string($handler[0])) {
-            $controller = new $handler[0]();
+            $controller = $this->container->get($handler[0]);
             $controller->{$handler[1]}(...array_values($params));
             return;
         }
