@@ -46,12 +46,17 @@ final class StudentController
                 try {
                     $service = new StudentCsvImportService($db);
                     $importResult = $service->import((string)$_FILES['csv']['tmp_name'], (int)$_FILES['csv']['size']);
-                    $message = sprintf(
-                        'Import terminé : %d ajouté(s), %d mis à jour, %d inchangé(s).',
-                        $importResult['created'],
-                        $importResult['updated'],
-                        $importResult['unchanged']
-                    );
+
+                    if (!empty($importResult['errors'])) {
+                        $error = 'Import annulé : aucune modification n’a été enregistrée. Corrige les lignes signalées puis réimporte le fichier.';
+                    } else {
+                        $message = sprintf(
+                            'Import atomique terminé : %d ajouté(s), %d mis à jour, %d inchangé(s).',
+                            $importResult['created'],
+                            $importResult['updated'],
+                            $importResult['unchanged']
+                        );
+                    }
                 } catch (Throwable $e) {
                     if ($e instanceof RuntimeException) {
                         $error = $e->getMessage();
