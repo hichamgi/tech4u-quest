@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace App\Controllers\Admin;
 
 use App\Core\Auth;
-use App\Core\Database;
 use App\Core\Logger;
 use App\Core\Url;
 use App\Core\View;
@@ -13,10 +12,13 @@ use Throwable;
 
 final class SettingsController
 {
+    public function __construct(private Setting $settingsModel)
+    {
+    }
+
     public function index(): void
     {
         Auth::requireAdmin(Url::to('login'));
-        $settingsModel = new Setting(Database::connection());
         $message = $error = null;
 
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
@@ -32,7 +34,7 @@ final class SettingsController
                     $error = 'L’année scolaire doit être au format 2026-2027.';
                 } else {
                     try {
-                        $settingsModel->saveMany([
+                        $this->settingsModel->saveMany([
                             'site_name' => $siteName,
                             'school_year' => $schoolYear,
                         ]);
@@ -46,7 +48,7 @@ final class SettingsController
         }
 
         try {
-            $settings = $settingsModel->all();
+            $settings = $this->settingsModel->all();
         } catch (Throwable $e) {
             Logger::exception($e, ['action' => 'load_settings']);
             $settings = [];
