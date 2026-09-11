@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace App\Controllers\Admin;
 
 use App\Core\Auth;
-use App\Core\Database;
 use App\Core\Logger;
 use App\Core\Url;
 use App\Core\View;
@@ -17,12 +16,15 @@ final class QuestionController
 {
     private const QUESTIONS_PER_PAGE = 50;
 
+    public function __construct(
+        private Question $model,
+        private QuestionBankService $bank
+    ) {
+    }
+
     public function index(): void
     {
         Auth::requireAdmin(Url::to('login'));
-        $db = Database::connection();
-        $model = new Question($db);
-        $bank = new QuestionBankService($db);
         $message = $error = null;
 
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
@@ -33,10 +35,10 @@ final class QuestionController
                     $id = (int)($_POST['id'] ?? 0);
                     $action = (string)($_POST['action'] ?? '');
                     if ($action === 'toggle') {
-                        $bank->toggle($id);
+                        $this->bank->toggle($id);
                         $message = 'État de la question modifié.';
                     } elseif ($action === 'duplicate') {
-                        $new = $bank->duplicate($id);
+                        $new = $this->bank->duplicate($id);
                         $message = 'Question dupliquée (#' . $new . ').';
                     }
                 } catch (Throwable $e) {
@@ -58,10 +60,10 @@ final class QuestionController
         $page = max(1, (int)($_GET['page'] ?? 1));
 
         try {
-            $modules = $model->modules();
-            $categories = $model->categories();
-            $groups = $model->exclusionGroups();
-            $result = $model->paginate([
+            $modules = $this->model->modules();
+            $categories = $this->model->categories();
+            $groups = $this->model->exclusionGroups();
+            $result = $this->model->paginate([
                 'module_id' => $moduleId,
                 'category_id' => $categoryId,
                 'type' => $type,
@@ -104,9 +106,6 @@ final class QuestionController
     private function editInternal(int $id): void
     {
         Auth::requireAdmin(Url::to('login'));
-        $db = Database::connection();
-        $model = new Question($db);
-        $bank = new QuestionBankService($db);
         $error = null;
         $question = [
             'category_id'=>'',
@@ -127,7 +126,7 @@ final class QuestionController
         ];
 
         if ($id > 0) {
-            $record = $model->findWithAnswers($id);
+            $record = $this->model->findWithAnswers($id);
             if ($record === null) {
                 http_response_code(404);
                 echo 'Question introuvable.';
@@ -161,7 +160,7 @@ final class QuestionController
                         'active'=>isset($_POST['active']) ? 1 : 0,
                         'answers'=>$posted,
                     ];
-                    $saved = $bank->save($data, $id ?: null);
+                    $saved = $this->bank->save($data, $id ?: null);
                     header('Location: ' . Url::to('admin/questions?message=saved&id=' . $saved));
                     exit;
                 } catch (Throwable $e) {
@@ -173,7 +172,7 @@ final class QuestionController
         }
 
         try {
-            $categories = $model->categories(true);
+            $categories = $this->model->categories(true);
         } catch (Throwable $e) {
             Logger::exception($e, ['controller' => self::class, 'action' => 'edit_categories']);
             $categories = [];
