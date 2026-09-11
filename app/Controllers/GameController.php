@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Auth;
-use App\Core\Database;
 use App\Core\Logger;
 use App\Core\Url;
 use App\Core\View;
@@ -16,6 +15,12 @@ use Throwable;
 
 final class GameController
 {
+    public function __construct(
+        private GameService $game,
+        private Attempt $attemptModel
+    ) {
+    }
+
     public function question(string $attempt): void
     {
         $student = Auth::requireStudent(Url::to('login'), Url::to('change-password'));
@@ -27,28 +32,11 @@ final class GameController
             exit;
         }
 
-        try {
-            $db = Database::connection();
-            $game = new GameService($db);
-            $attemptModel = new Attempt($db);
-        } catch (Throwable $e) {
-            Logger::exception($e, ['area' => 'game_init', 'attempt_id' => $attemptId]);
-            View::render('game/question', [
-                'attemptId' => $attemptId,
-                'student' => $student,
-                'data' => null,
-                'error' => 'Le service de quiz est temporairement indisponible. Réessaie dans un instant.',
-                'feedback' => null,
-                'csrfToken' => Auth::csrfToken(),
-            ]);
-            return;
-        }
-
         $error = null;
         $feedback = null;
 
         try {
-            $moduleActive = $attemptModel->moduleActiveForStudent($attemptId, (int)$student['id']);
+            $moduleActive = $this->attemptModel->moduleActiveForStudent($attemptId, (int)$student['id']);
         } catch (Throwable $e) {
             Logger::exception($e, ['area' => 'game_access', 'attempt_id' => $attemptId]);
             $moduleActive = null;
@@ -69,7 +57,7 @@ final class GameController
                 $error = 'Jeton de sécurité invalide.';
             } else {
                 try {
-                    $result = $game->submit($attemptId, (int)$student['id'], $_POST);
+                    $result = $this->game->submit($attemptId, (int)$student['id'], $_POST);
 
                     if ($result['status'] === 'completed') {
                         header('Location: ' . Url::to('attempt/' . $attemptId . '/complete'));
@@ -87,7 +75,7 @@ final class GameController
                     $feedback = 'Mauvaise réponse : une vie a été retirée. Réessaie la même question.';
                 } catch (RuntimeException $e) {
                     try {
-                        $currentAttempt = $game->attempt($attemptId, (int)$student['id']);
+                        $currentAttempt = $this->game->attempt($attemptId, (int)$student['id']);
                         $status = (string)($currentAttempt['status'] ?? '');
 
                         if ($status === 'completed') {
@@ -124,7 +112,7 @@ final class GameController
         $data = null;
         if ($error === null) {
             try {
-                $data = $game->currentQuestion($attemptId, (int)$student['id']);
+                $data = $this->game->currentQuestion($attemptId, (int)$student['id']);
             } catch (RuntimeException $e) {
                 if ($e instanceof PDOException) {
                     Logger::exception($e, ['area' => 'game_question', 'attempt_id' => $attemptId]);
@@ -170,8 +158,7 @@ final class GameController
         $attempt = null;
 
         try {
-            $game = new GameService(Database::connection());
-            $attempt = $game->attempt($attemptId, (int)$student['id']);
+            $attempt = $this->game->attempt($attemptId, (int)$student['id']);
             if ((string)$attempt['status'] !== $expectedStatus) {
                 header('Location: ' . Url::to('dashboard'));
                 exit;
