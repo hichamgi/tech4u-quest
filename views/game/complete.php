@@ -45,7 +45,7 @@ $modeLabels = [
         <h3><?= e((string)$attempt['module_title']) ?></h3>
         <?php if (!empty($attempt['badge_name'])): ?><span class="chip"><?= e((string)($attempt['badge_icon'] ?: '🏅')) ?> Badge : <?= e((string)$attempt['badge_name']) ?></span><?php endif; ?>
         <div class="score-big"><?= (int)$attempt['score'] ?> / <?= (int)$attempt['total_questions'] ?></div>
-        <div class="hero-actions" style="justify-content:center;margin-top:25px"><a class="btn btn-gold" href="<?= e(Url::to('dashboard#badges')) ?>">Voir mes badges</a><a class="btn btn-primary" href="<?= e(Url::to('module/' . (int)$attempt['module_id'])) ?>">Voir les modes</a><a class="btn btn-secondary" href="<?= e(Url::to('dashboard')) ?>">Retour aux modules</a></div>
+        <div class="hero-actions pagination-center form-actions"><a class="btn btn-gold" href="<?= e(Url::to('dashboard#badges')) ?>">Voir mes badges</a><a class="btn btn-primary" href="<?= e(Url::to('module/' . (int)$attempt['module_id'])) ?>">Voir les modes</a><a class="btn btn-secondary" href="<?= e(Url::to('dashboard')) ?>">Retour aux modules</a></div>
     </section>
 <?php endif; ?>
 </main>
