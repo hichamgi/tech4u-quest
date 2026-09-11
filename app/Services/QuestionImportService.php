@@ -54,6 +54,7 @@ final class QuestionImportService
 
             $valid = [];
             $errors = [];
+            $seenQuestions = [];
             $line = 1;
 
             while (($row = fgetcsv($handle, 0, $delimiter, '"', '\\')) !== false) {
@@ -87,6 +88,13 @@ final class QuestionImportService
                     $errors[] = "Ligne {$line} : question/type/difficulté invalide.";
                     continue;
                 }
+
+                $questionKey = $this->normalizeQuestionText($question);
+                if (isset($seenQuestions[$questionKey])) {
+                    $errors[] = "Ligne {$line} : question déjà présente dans ce CSV (première occurrence ligne {$seenQuestions[$questionKey]}).";
+                    continue;
+                }
+                $seenQuestions[$questionKey] = $line;
 
                 $answers = [];
                 for ($i = 1; $i <= 6; $i++) {
@@ -179,5 +187,11 @@ final class QuestionImportService
             'short' => count($answers) >= 1 && $correct >= 1,
             default => false,
         };
+    }
+
+    private function normalizeQuestionText(string $question): string
+    {
+        $question = mb_strtolower(trim($question), 'UTF-8');
+        return preg_replace('/\s+/u', ' ', $question) ?? $question;
     }
 }
