@@ -50,15 +50,7 @@ final class Router
         $allowedMethods = [];
 
         foreach ($this->routes as $route) {
-            $regex = preg_replace(
-                '#\{([A-Za-z_][A-Za-z0-9_]*)\}#',
-                '(?P<$1>[^/]+)',
-                $route['pattern']
-            );
-
-            if ($regex === null) {
-                throw new RuntimeException('Impossible de compiler la route.');
-            }
+            $regex = $this->compilePattern($route['pattern']);
 
             if (!preg_match('#^' . $regex . '/?$#', $path, $matches)) {
                 continue;
@@ -102,6 +94,27 @@ final class Router
 
         http_response_code(404);
         echo '404 - Page introuvable';
+    }
+
+    private function compilePattern(string $pattern): string
+    {
+        if (!preg_match_all('/\{([A-Za-z_][A-Za-z0-9_]*)\}/', $pattern, $matches, PREG_OFFSET_CAPTURE)) {
+            return preg_quote($pattern, '#');
+        }
+
+        $regex = '';
+        $offset = 0;
+
+        foreach ($matches[0] as $index => $match) {
+            [$placeholder, $position] = $match;
+            $regex .= preg_quote(substr($pattern, $offset, $position - $offset), '#');
+            $name = (string)$matches[1][$index][0];
+            $regex .= '(?P<' . $name . '>[^/]+)';
+            $offset = $position + strlen($placeholder);
+        }
+
+        $regex .= preg_quote(substr($pattern, $offset), '#');
+        return $regex;
     }
 
     private function stripBasePath(string $path): string
