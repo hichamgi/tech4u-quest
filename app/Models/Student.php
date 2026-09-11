@@ -84,6 +84,80 @@ final class Student
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function adminList(string $classCode = ''): array
+    {
+        $params = [];
+        $sql = 'SELECT id,class_code,student_number,login_code,must_change_password,active,created_at,updated_at FROM students';
+
+        $classCode = strtoupper(trim($classCode));
+        if ($classCode !== '') {
+            $sql .= ' WHERE class_code = :class_code';
+            $params['class_code'] = $classCode;
+        }
+
+        $sql .= ' ORDER BY class_code,student_number,id';
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function classSummaries(): array
+    {
+        return $this->db->query(
+            'SELECT class_code,COUNT(*) total,SUM(active) active_total
+             FROM students
+             GROUP BY class_code
+             ORDER BY class_code'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function adminTotals(): array
+    {
+        return $this->db->query(
+            'SELECT COUNT(*) total,
+                    COALESCE(SUM(active),0) active,
+                    COALESCE(SUM(must_change_password),0) must_change
+             FROM students'
+        )->fetch(PDO::FETCH_ASSOC) ?: ['total' => 0, 'active' => 0, 'must_change' => 0];
+    }
+
+    public function demoSummary(int $studentId = 2): ?array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT s.id,s.login_code,s.active,
+                    (SELECT COUNT(*) FROM attempts a WHERE a.student_id=s.id) attempts,
+                    (SELECT COUNT(*) FROM student_path_badges spb WHERE spb.student_id=s.id) badges
+             FROM students s
+             WHERE s.id=:id AND s.class_code=:class AND s.student_number=:number
+             LIMIT 1'
+        );
+        $stmt->execute(['id' => $studentId, 'class' => 'DEMO', 'number' => 1]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row ?: null;
+    }
+
+    public function resetDemoProgress(int $studentId = 2): void
+    {
+        if ($this->demoSummary($studentId) === null) {
+            throw new RuntimeException('Le compte DEMO-1 (ID 2) n’existe pas. Importe-le d’abord avec le CSV élèves.');
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $this->db->prepare('DELETE FROM student_path_badges WHERE student_id=:id')->execute(['id' => $studentId]);
+            $this->db->prepare('DELETE FROM student_badges WHERE student_id=:id')->execute(['id' => $studentId]);
+            $this->db->prepare('DELETE FROM attempts WHERE student_id=:id')->execute(['id' => $studentId]);
+            $this->db->commit();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
+    }
+
     /**
      * Create or synchronize a Tech4U student from the local MySQL database.
      * The numeric ID is provided by MySQL and must remain stable.
