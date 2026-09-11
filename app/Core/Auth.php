@@ -3,7 +3,8 @@ declare(strict_types=1);
 
 namespace App\Core;
 
-use PDO;
+use App\Models\Student;
+use App\Models\User;
 
 final class Auth
 {
@@ -39,15 +40,7 @@ final class Auth
         }
 
         $db = Database::connection();
-
-        $stmt = $db->prepare(
-            'SELECT id, username AS login, password_hash, role, active
-             FROM users
-             WHERE username = :identifier
-             LIMIT 1'
-        );
-        $stmt->execute(['identifier' => $identifier]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        $user = (new User($db))->findForAuthentication($identifier);
 
         if ($user && (int)$user['active'] === 1 && password_verify($password, (string)$user['password_hash'])) {
             session_regenerate_id(true);
@@ -60,15 +53,7 @@ final class Auth
             return true;
         }
 
-        $stmt = $db->prepare(
-            'SELECT id, login_code AS login, class_code, student_number, password_hash,
-                    must_change_password, active
-             FROM students
-             WHERE login_code = :identifier
-             LIMIT 1'
-        );
-        $stmt->execute(['identifier' => strtoupper($identifier)]);
-        $student = $stmt->fetch(PDO::FETCH_ASSOC);
+        $student = (new Student($db))->findForAuthentication($identifier);
 
         if ($student && (int)$student['active'] === 1 && password_verify($password, (string)$student['password_hash'])) {
             session_regenerate_id(true);
