@@ -8,46 +8,26 @@ use App\Core\Database;
 use App\Core\Logger;
 use App\Core\Url;
 use App\Core\View;
+use App\Models\Student;
 use App\Services\GameService;
-use PDO;
 use PDOException;
 use RuntimeException;
 use Throwable;
 
 final class StudentController
 {
-    private function isDemoStudent(PDO $db, int $studentId): bool
-    {
-        $stmt = $db->prepare('SELECT UPPER(TRIM(class_code)) FROM students WHERE id=:id LIMIT 1');
-        $stmt->execute(['id' => $studentId]);
-        return (string)$stmt->fetchColumn() === 'DEMO';
-    }
-
     public function dashboard(): void
     {
         $student = Auth::requireStudent(Url::to('login'));
 
         try {
             $db = Database::connection();
+            $studentModel = new Student($db);
             $game = new GameService($db);
-            $isDemo = $this->isDemoStudent($db, (int)$student['id']);
+            $isDemo = $studentModel->isDemo((int)$student['id']);
             $modules = $game->modulesForStudent((int)$student['id'], $isDemo);
-
-            $badgeCountStmt = $db->prepare('SELECT COUNT(*) FROM student_path_badges WHERE student_id=:student');
-            $badgeCountStmt->execute(['student' => $student['id']]);
-            $badgeCount = (int)$badgeCountStmt->fetchColumn();
-
-            $badgesStmt = $db->prepare(
-                'SELECT pb.icon,pb.name,pb.description,spb.obtained_at,m.title AS module_title,p.name AS path_name
-                 FROM student_path_badges spb
-                 JOIN path_badges pb ON pb.id=spb.badge_id
-                 JOIN module_paths p ON p.id=pb.path_id
-                 JOIN modules m ON m.id=pb.module_id
-                 WHERE spb.student_id=:student
-                 ORDER BY spb.obtained_at DESC, p.display_order DESC'
-            );
-            $badgesStmt->execute(['student' => $student['id']]);
-            $badges = $badgesStmt->fetchAll(PDO::FETCH_ASSOC);
+            $badgeCount = $studentModel->badgeCount((int)$student['id']);
+            $badges = $studentModel->badges((int)$student['id']);
         } catch (Throwable $e) {
             Logger::exception($e, ['area' => 'student_dashboard', 'student_id' => (int)$student['id']]);
             http_response_code(503);
@@ -80,8 +60,9 @@ final class StudentController
 
         try {
             $db = Database::connection();
+            $studentModel = new Student($db);
             $game = new GameService($db);
-            $isDemo = $this->isDemoStudent($db, (int)$student['id']);
+            $isDemo = $studentModel->isDemo((int)$student['id']);
             $module = $game->module($moduleId, $isDemo);
             $paths = $game->pathsForStudent($moduleId, (int)$student['id'], $isDemo);
         } catch (RuntimeException $e) {
@@ -125,8 +106,9 @@ final class StudentController
 
         try {
             $db = Database::connection();
+            $studentModel = new Student($db);
             $game = new GameService($db);
-            $isDemo = $this->isDemoStudent($db, (int)$student['id']);
+            $isDemo = $studentModel->isDemo((int)$student['id']);
 
             if ($pathId < 1) {
                 throw new RuntimeException('Choisis un parcours avant de commencer.');
@@ -153,8 +135,9 @@ final class StudentController
         $paths = [];
         try {
             $db ??= Database::connection();
+            $studentModel ??= new Student($db);
             $game ??= new GameService($db);
-            $isDemo ??= $this->isDemoStudent($db, (int)$student['id']);
+            $isDemo ??= $studentModel->isDemo((int)$student['id']);
             $module = $game->module($moduleId, $isDemo);
             $paths = $game->pathsForStudent($moduleId, (int)$student['id'], $isDemo);
         } catch (Throwable $reloadError) {
