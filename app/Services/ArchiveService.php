@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Core\Database;
+use App\Core\DatabaseLock;
 use PDO;
 use RuntimeException;
 use Throwable;
@@ -61,6 +63,12 @@ final class ArchiveService
             );
         }
 
+        // The archive request must not keep the normal shared application lock.
+        // In the current flow no PDO connection is required before archival, but
+        // disconnect() also protects future authentication/session changes.
+        Database::disconnect();
+        $maintenanceLock = DatabaseLock::acquireExclusive($this->databasePath);
+
         $token = bin2hex(random_bytes(6));
         $nextPath = dirname($this->databasePath) . '/.next-' . $token . '.sqlite';
         $oldPath = dirname($this->databasePath) . '/.old-' . $token . '.sqlite';
@@ -114,7 +122,9 @@ final class ArchiveService
             $next->commit();
             $next = null;
 
-            // Retirer les fichiers WAL résiduels de l’ancienne base avant l’échange.
+            // Aucun autre processus applicatif ne peut posséder de connexion DB
+            // tant que le verrou exclusif est détenu, donc WAL/SHM peuvent être
+            // nettoyés sans risque avant l’échange des fichiers.
             @unlink($this->databasePath . '-wal');
             @unlink($this->databasePath . '-shm');
 
@@ -148,6 +158,8 @@ final class ArchiveService
             }
 
             throw $e;
+        } finally {
+            DatabaseLock::releaseExclusive($maintenanceLock);
         }
     }
 
