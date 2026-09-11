@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace App\Controllers\Admin;
 
 use App\Core\Auth;
-use App\Core\Database;
 use App\Core\Logger;
 use App\Core\Url;
 use App\Core\View;
@@ -14,21 +13,24 @@ use Throwable;
 
 final class DashboardController
 {
+    public function __construct(
+        private AdminDashboard $dashboard,
+        private Setting $settingsModel
+    ) {
+    }
+
     public function index(): void
     {
         $admin = Auth::requireAdmin(Url::to('login'));
-        $db = Database::connection();
-        $dashboard = new AdminDashboard($db);
-        $settingsModel = new Setting($db);
         $error = null;
 
         try {
-            $stats = $dashboard->stats();
-            $settings = $settingsModel->all();
+            $stats = $this->dashboard->stats();
+            $settings = $this->settingsModel->all();
             $schoolYear = (string)($settings['school_year'] ?? 'Non définie');
-            $moduleStatus = $dashboard->moduleStatus();
-            $expectedBadgeCount = $dashboard->expectedBadgeCount();
-            $recent = $dashboard->recentAttempts(10);
+            $moduleStatus = $this->dashboard->moduleStatus();
+            $expectedBadgeCount = $this->dashboard->expectedBadgeCount();
+            $recent = $this->dashboard->recentAttempts(10);
         } catch (Throwable $e) {
             Logger::exception($e, ['controller' => self::class, 'action' => 'index']);
             $stats = [
