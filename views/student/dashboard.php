@@ -21,13 +21,13 @@ function e(string $value): string
 <body>
 <header class="site-header"><div class="container nav">
 <a class="brand" href="<?= e(Url::to('dashboard')) ?>"><span class="brand-mark">⚡</span><span>Tech4U <b>QUEST</b></span></a>
-<nav class="nav-links"><a class="nav-link active" href="<?= e(Url::to('dashboard')) ?>">Mes quêtes</a><a class="nav-link" href="#badges">Badges</a><form method="post" action="<?= e(Url::to('logout')) ?>" style="margin:0"><input type="hidden" name="csrf_token" value="<?= e(Auth::csrfToken()) ?>"><button class="btn btn-secondary" type="submit">Déconnexion</button></form></nav>
+<nav class="nav-links"><a class="nav-link active" href="<?= e(Url::to('dashboard')) ?>">Mes quêtes</a><a class="nav-link" href="#badges">Badges</a><form class="form-inline" method="post" action="<?= e(Url::to('logout')) ?>"><input type="hidden" name="csrf_token" value="<?= e(Auth::csrfToken()) ?>"><button class="btn btn-secondary" type="submit">Déconnexion</button></form></nav>
 </div></header>
 <main class="container page">
 <div class="page-head"><div><span class="eyebrow">⚔️ TABLEAU DE BORD ÉLÈVE</span><h1>Bonjour <?= e((string)$student['login']) ?> 👋</h1><p>Choisis un module. Commence par le mode Facile puis débloque les niveaux suivants grâce aux badges.</p></div><div class="chip">🏆 <?= (int)$badgeCount ?> badge<?= (int)$badgeCount > 1 ? 's' : '' ?></div></div>
 
 <?php if (!empty($error)): ?>
-<div class="card card-pad" style="border-color:#fb7185;margin-bottom:1rem"><strong><?= e((string)$error) ?></strong></div>
+<div class="card notice notice-error"><strong><?= e((string)$error) ?></strong></div>
 <?php endif; ?>
 
 <section class="grid module-grid">
@@ -49,7 +49,7 @@ $status = $completed ? 'Terminé' : ($resume ? 'En cours' : ($available ? 'À co
 <?php endforeach; ?>
 </section>
 
-<section id="badges" style="margin-top:2rem"><div class="page-head"><div><span class="eyebrow">🏆 RÉCOMPENSES</span><h2>Mes badges</h2><p>Chaque module possède quatre badges : Facile, Moyen, Difficile et Expert.</p></div></div><div class="grid module-grid">
+<section id="badges" class="student-badges"><div class="page-head"><div><span class="eyebrow">🏆 RÉCOMPENSES</span><h2>Mes badges</h2><p>Chaque module possède quatre badges : Facile, Moyen, Difficile et Expert.</p></div></div><div class="grid module-grid">
 <?php if (!$badges): ?><div class="card card-pad"><p>Aucun badge pour le moment. Termine le mode Facile d’un module pour obtenir le premier.</p></div><?php endif; ?>
 <?php foreach ($badges as $b): ?><article class="card module-card"><div class="module-icon"><?= e((string)($b['icon'] ?: '🏆')) ?></div><h3><?= e((string)$b['name']) ?></h3><p><?= e((string)($b['description'] ?? '')) ?></p><small><?= e((string)$b['module_title']) ?> · obtenu le <?= e(DateFormatter::human((string)$b['obtained_at'])) ?></small></article><?php endforeach; ?>
 </div></section>
