@@ -8,8 +8,9 @@ use App\Core\Database;
 use App\Core\Logger;
 use App\Core\Url;
 use App\Core\View;
+use App\Models\Question;
 use App\Services\QuestionBankService;
-use PDO;
+use App\Services\QuestionImportService;
 use RuntimeException;
 use Throwable;
 
@@ -22,7 +23,8 @@ final class QuestionController
     {
         Auth::requireAdmin(Url::to('login'));
         $db = Database::connection();
-        $svc = new QuestionBankService($db);
+        $model = new Question($db);
+        $bank = new QuestionBankService($db);
         $message = $error = null;
 
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
@@ -33,10 +35,10 @@ final class QuestionController
                     $id = (int)($_POST['id'] ?? 0);
                     $action = (string)($_POST['action'] ?? '');
                     if ($action === 'toggle') {
-                        $svc->toggle($id);
+                        $bank->toggle($id);
                         $message = 'État de la question modifié.';
                     } elseif ($action === 'duplicate') {
-                        $new = $svc->duplicate($id);
+                        $new = $bank->duplicate($id);
                         $message = 'Question dupliquée (#' . $new . ').';
                     }
                 } catch (Throwable $e) {
@@ -57,54 +59,33 @@ final class QuestionController
         $group = trim((string)($_GET['group'] ?? ''));
         $page = max(1, (int)($_GET['page'] ?? 1));
 
-        $modules = $db->query('SELECT id,title FROM modules ORDER BY display_order,id')->fetchAll(PDO::FETCH_ASSOC);
-        $categories = $db->query('SELECT id,module_id,name FROM categories ORDER BY module_id,display_order,id')->fetchAll(PDO::FETCH_ASSOC);
-        $groups = $db->query("SELECT DISTINCT exclusion_group FROM questions WHERE exclusion_group IS NOT NULL AND trim(exclusion_group)<>'' ORDER BY exclusion_group")->fetchAll(PDO::FETCH_COLUMN);
-
-        $from = ' FROM questions q JOIN categories c ON c.id=q.category_id JOIN modules m ON m.id=c.module_id WHERE 1=1';
-        $where = '';
-        $params = [];
-
-        if ($moduleId > 0) {
-            $where .= ' AND m.id=:m';
-            $params['m'] = $moduleId;
+        try {
+            $modules = $model->modules();
+            $categories = $model->categories();
+            $groups = $model->exclusionGroups();
+            $result = $model->paginate([
+                'module_id' => $moduleId,
+                'category_id' => $categoryId,
+                'type' => $type,
+                'q' => $q,
+                'active' => $active,
+                'group' => $group,
+            ], $page, self::QUESTIONS_PER_PAGE);
+            $rows = $result['rows'];
+            $page = $result['page'];
+            $totalPages = $result['totalPages'];
+            $totalRows = $result['totalRows'];
+        } catch (Throwable $e) {
+            Logger::exception($e, ['controller' => self::class, 'action' => 'index_load']);
+            $modules = [];
+            $categories = [];
+            $groups = [];
+            $rows = [];
+            $page = 1;
+            $totalPages = 1;
+            $totalRows = 0;
+            $error ??= 'Impossible de charger la banque de questions pour le moment.';
         }
-        if ($categoryId > 0) {
-            $where .= ' AND c.id=:c';
-            $params['c'] = $categoryId;
-        }
-        if (in_array($type, ['qcm', 'true_false', 'multiple', 'short'], true)) {
-            $where .= ' AND q.type=:t';
-            $params['t'] = $type;
-        }
-        if ($q !== '') {
-            $where .= ' AND q.question LIKE :q';
-            $params['q'] = '%' . $q . '%';
-        }
-        if ($active === '1' || $active === '0') {
-            $where .= ' AND q.active=:a';
-            $params['a'] = (int)$active;
-        }
-        if ($group !== '') {
-            $where .= ' AND q.exclusion_group=:g';
-            $params['g'] = $group;
-        }
-
-        $countStmt = $db->prepare('SELECT COUNT(*)' . $from . $where);
-        $countStmt->execute($params);
-        $totalRows = (int)$countStmt->fetchColumn();
-        $totalPages = max(1, (int)ceil($totalRows / self::QUESTIONS_PER_PAGE));
-        $page = min($page, $totalPages);
-        $offset = ($page - 1) * self::QUESTIONS_PER_PAGE;
-
-        $sql = 'SELECT q.id,q.question,q.type,q.difficulty,q.lesson,q.topic,q.active,q.exclusion_group,c.name category_name,m.title module_title,'
-             . '(SELECT COUNT(*) FROM question_answers a WHERE a.question_id=q.id) answer_count'
-             . $from . $where
-             . ' ORDER BY q.id DESC LIMIT ' . self::QUESTIONS_PER_PAGE . ' OFFSET ' . $offset;
-
-        $stmt = $db->prepare($sql);
-        $stmt->execute($params);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         View::render('admin/questions/index', compact(
             'message', 'error', 'moduleId', 'categoryId', 'type', 'q', 'active', 'group',
@@ -126,24 +107,36 @@ final class QuestionController
     {
         Auth::requireAdmin(Url::to('login'));
         $db = Database::connection();
-        $svc = new QuestionBankService($db);
+        $model = new Question($db);
+        $bank = new QuestionBankService($db);
         $error = null;
-        $question = ['category_id'=>'','question'=>'','type'=>'qcm','difficulty'=>1,'lesson'=>'','topic'=>'','explanation'=>'','exclusion_group'=>'','active'=>1];
-        $answers = [['answer'=>'','is_correct'=>1],['answer'=>'','is_correct'=>0],['answer'=>'','is_correct'=>0],['answer'=>'','is_correct'=>0]];
+        $question = [
+            'category_id'=>'',
+            'question'=>'',
+            'type'=>'qcm',
+            'difficulty'=>1,
+            'lesson'=>'',
+            'topic'=>'',
+            'explanation'=>'',
+            'exclusion_group'=>'',
+            'active'=>1,
+        ];
+        $answers = [
+            ['answer'=>'','is_correct'=>1],
+            ['answer'=>'','is_correct'=>0],
+            ['answer'=>'','is_correct'=>0],
+            ['answer'=>'','is_correct'=>0],
+        ];
 
         if ($id > 0) {
-            $s = $db->prepare('SELECT * FROM questions WHERE id=:id');
-            $s->execute(['id'=>$id]);
-            $row = $s->fetch(PDO::FETCH_ASSOC);
-            if (!$row) {
+            $record = $model->findWithAnswers($id);
+            if ($record === null) {
                 http_response_code(404);
                 echo 'Question introuvable.';
                 return;
             }
-            $question = $row;
-            $a = $db->prepare('SELECT answer,is_correct FROM question_answers WHERE question_id=:id ORDER BY display_order,id');
-            $a->execute(['id'=>$id]);
-            $answers = $a->fetchAll(PDO::FETCH_ASSOC) ?: $answers;
+            $question = $record['question'];
+            $answers = $record['answers'] ?: $answers;
         }
 
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
@@ -153,7 +146,10 @@ final class QuestionController
                 try {
                     $posted = [];
                     foreach ((array)($_POST['answer'] ?? []) as $i => $text) {
-                        $posted[] = ['answer'=>$text,'is_correct'=>isset($_POST['correct'][$i]) ? 1 : 0];
+                        $posted[] = [
+                            'answer' => $text,
+                            'is_correct' => isset($_POST['correct'][$i]) ? 1 : 0,
+                        ];
                     }
                     $data = [
                         'category_id'=>$_POST['category_id']??null,
@@ -167,7 +163,7 @@ final class QuestionController
                         'active'=>isset($_POST['active']) ? 1 : 0,
                         'answers'=>$posted,
                     ];
-                    $saved = $svc->save($data, $id ?: null);
+                    $saved = $bank->save($data, $id ?: null);
                     header('Location: ' . Url::to('admin/questions?message=saved&id=' . $saved));
                     exit;
                 } catch (Throwable $e) {
@@ -178,14 +174,21 @@ final class QuestionController
             }
         }
 
-        $categories = $db->query('SELECT c.id,c.name,m.title module_title FROM categories c JOIN modules m ON m.id=c.module_id WHERE c.active=1 ORDER BY m.display_order,c.display_order,c.id')->fetchAll(PDO::FETCH_ASSOC);
+        try {
+            $categories = $model->categories(true);
+        } catch (Throwable $e) {
+            Logger::exception($e, ['controller' => self::class, 'action' => 'edit_categories']);
+            $categories = [];
+            $error ??= 'Impossible de charger les catégories.';
+        }
+
         View::render('admin/questions/edit', compact('id','question','answers','categories','error'));
     }
 
     public function exclusions(): void
     {
         Auth::requireAdmin(Url::to('login'));
-        $db = Database::connection();
+        $model = new Question(Database::connection());
         $message = $error = null;
 
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
@@ -194,22 +197,12 @@ final class QuestionController
             } else {
                 try {
                     $groups = $_POST['group'] ?? [];
-                    if (!is_array($groups)) throw new RuntimeException('Données invalides.');
-                    $stmt = $db->prepare('UPDATE questions SET exclusion_group=:g,updated_at=CURRENT_TIMESTAMP WHERE id=:id');
-                    $db->beginTransaction();
-                    foreach ($groups as $id => $g) {
-                        $id = (int)$id;
-                        if ($id < 1) continue;
-                        $g = trim((string)$g);
-                        if ($g !== '' && !preg_match('/^[A-Za-z0-9_.-]{1,50}$/', $g)) {
-                            throw new RuntimeException('Nom de groupe invalide pour la question #' . $id . '.');
-                        }
-                        $stmt->execute(['g'=>$g !== '' ? $g : null,'id'=>$id]);
+                    if (!is_array($groups)) {
+                        throw new RuntimeException('Données invalides.');
                     }
-                    $db->commit();
-                    $message = count($groups) . ' question(s) mise(s) à jour sur cette page.';
+                    $updated = $model->updateExclusionGroups($groups);
+                    $message = $updated . ' question(s) mise(s) à jour sur cette page.';
                 } catch (Throwable $e) {
-                    if ($db->inTransaction()) $db->rollBack();
                     $error = $this->safeError($e, 'exclusions');
                 }
             }
@@ -220,39 +213,28 @@ final class QuestionController
         $search = trim((string)($_GET['q'] ?? ''));
         $page = max(1, (int)($_GET['page'] ?? 1));
 
-        $from = ' FROM questions q JOIN categories c ON c.id=q.category_id JOIN modules m ON m.id=c.module_id WHERE q.active=1';
-        $where = '';
-        $params = [];
-        if ($module > 0) {
-            $where .= ' AND m.id=:m';
-            $params['m'] = $module;
+        try {
+            $result = $model->paginateExclusions([
+                'module' => $module,
+                'category' => $category,
+                'search' => $search,
+            ], $page, self::EXCLUSIONS_PER_PAGE);
+            $questions = $result['questions'];
+            $page = $result['page'];
+            $totalPages = $result['totalPages'];
+            $totalRows = $result['totalRows'];
+            $modules = $model->modules();
+            $categories = $model->categories(true);
+        } catch (Throwable $e) {
+            Logger::exception($e, ['controller' => self::class, 'action' => 'exclusions_load']);
+            $questions = [];
+            $modules = [];
+            $categories = [];
+            $page = 1;
+            $totalPages = 1;
+            $totalRows = 0;
+            $error ??= 'Impossible de charger les groupes d’exclusion pour le moment.';
         }
-        if ($category > 0) {
-            $where .= ' AND c.id=:c';
-            $params['c'] = $category;
-        }
-        if ($search !== '') {
-            $where .= ' AND (q.question LIKE :search OR q.exclusion_group LIKE :search)';
-            $params['search'] = '%' . $search . '%';
-        }
-
-        $countStmt = $db->prepare('SELECT COUNT(*)' . $from . $where);
-        $countStmt->execute($params);
-        $totalRows = (int)$countStmt->fetchColumn();
-        $totalPages = max(1, (int)ceil($totalRows / self::EXCLUSIONS_PER_PAGE));
-        $page = min($page, $totalPages);
-        $offset = ($page - 1) * self::EXCLUSIONS_PER_PAGE;
-
-        $sql = 'SELECT q.id,q.question,q.exclusion_group,c.id category_id,c.name category_name,m.id module_id,m.title module_title'
-             . $from . $where
-             . ' ORDER BY m.display_order,c.display_order,q.id'
-             . ' LIMIT ' . self::EXCLUSIONS_PER_PAGE . ' OFFSET ' . $offset;
-        $stmt = $db->prepare($sql);
-        $stmt->execute($params);
-        $questions = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        $modules = $db->query('SELECT id,title FROM modules ORDER BY display_order,id')->fetchAll(PDO::FETCH_ASSOC);
-        $categories = $db->query('SELECT c.id,c.name,m.title module_title FROM categories c JOIN modules m ON m.id=c.module_id WHERE c.active=1 ORDER BY m.display_order,c.display_order,c.id')->fetchAll(PDO::FETCH_ASSOC);
 
         View::render('admin/questions/exclusions', compact(
             'message','error','module','category','search','questions','modules','categories',
@@ -265,7 +247,9 @@ final class QuestionController
         Auth::requireAdmin(Url::to('login'));
         Auth::boot();
         $db = Database::connection();
-        $svc = new QuestionBankService($db);
+        $model = new Question($db);
+        $bank = new QuestionBankService($db);
+        $importer = new QuestionImportService($db, $model, $bank);
         $errors = [];
         $preview = $_SESSION['question_import_preview'] ?? null;
         $message = null;
@@ -275,113 +259,35 @@ final class QuestionController
                 $errors[] = 'Jeton de sécurité invalide.';
             } elseif (($_POST['action'] ?? '') === 'commit' && is_array($preview)) {
                 $validRows = is_array($preview['valid'] ?? null) ? $preview['valid'] : [];
-
-                if ($validRows === []) {
-                    $errors[] = 'Aucune question valide à importer.';
-                } else {
-                    try {
-                        $db->beginTransaction();
-                        foreach ($validRows as $i => $data) {
-                            try {
-                                $svc->save($data);
-                            } catch (Throwable $e) {
-                                if ($e instanceof RuntimeException) {
-                                    throw new RuntimeException('Ligne ' . ($i + 2) . ' : ' . $e->getMessage(), 0, $e);
-                                }
-                                Logger::exception($e, [
-                                    'controller'=>'Admin\\QuestionController',
-                                    'action'=>'import_commit',
-                                    'line'=>$i + 2,
-                                ]);
-                                throw new RuntimeException('Ligne ' . ($i + 2) . ' : erreur technique lors de l’enregistrement.', 0, $e);
-                            }
-                        }
-                        $db->commit();
-
-                        $imported = count($validRows);
-                        unset($_SESSION['question_import_preview']);
-                        $preview = null;
-                        $message = $imported . ' question(s) importée(s). Import atomique terminé avec succès.';
-                    } catch (Throwable $e) {
-                        if ($db->inTransaction()) {
-                            $db->rollBack();
-                        }
-                        if ($e instanceof RuntimeException) {
-                            $errors[] = $e->getMessage() . ' Import annulé : aucune question du lot n’a été enregistrée.';
-                        } else {
-                            Logger::exception($e, [
-                                'controller'=>'Admin\\QuestionController',
-                                'action'=>'import_commit_atomic',
-                            ]);
-                            $errors[] = 'Erreur technique pendant l’import. Import annulé : aucune question du lot n’a été enregistrée.';
-                        }
+                try {
+                    $imported = $importer->commit($validRows);
+                    unset($_SESSION['question_import_preview']);
+                    $preview = null;
+                    $message = $imported . ' question(s) importée(s). Import atomique terminé avec succès.';
+                } catch (Throwable $e) {
+                    if ($e instanceof RuntimeException) {
+                        $errors[] = $e->getMessage() . ' Import annulé : aucune question du lot n’a été enregistrée.';
+                    } else {
+                        Logger::exception($e, [
+                            'controller'=>self::class,
+                            'action'=>'import_commit_atomic',
+                        ]);
+                        $errors[] = 'Erreur technique pendant l’import. Import annulé : aucune question du lot n’a été enregistrée.';
                     }
                 }
             } else {
                 $file = $_FILES['csv'] ?? null;
                 if (!is_array($file) || (int)($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
                     $errors[] = 'Fichier CSV invalide.';
-                } elseif ((int)$file['size'] > 3000000) {
-                    $errors[] = 'Le fichier dépasse 3 Mo.';
                 } else {
-                    $h = fopen((string)$file['tmp_name'], 'rb');
-                    if (!$h) {
-                        $errors[] = 'Impossible d’ouvrir le CSV.';
-                    } else {
-                        $first = fgets($h);
-                        $delim = substr_count((string)$first, ';') >= substr_count((string)$first, ',') ? ';' : ',';
-                        rewind($h);
-                        $header = fgetcsv($h, 0, $delim, '"', '\\');
-                        $header = array_map(static fn($v)=>strtolower(preg_replace('/^\xEF\xBB\xBF/','',trim((string)$v)) ?? trim((string)$v)), (array)$header);
-                        foreach (['category_id','question','type','difficulty'] as $r) {
-                            if (!in_array($r, $header, true)) $errors[] = 'Colonne obligatoire absente : ' . $r;
-                        }
-                        $valid = [];
-                        $rowErrors = [];
-                        $line = 1;
-                        if (!$errors) {
-                            while (($row = fgetcsv($h, 0, $delim, '"', '\\')) !== false) {
-                                $line++;
-                                if (count(array_filter($row, static fn($x)=>trim((string)$x) !== '')) === 0) continue;
-                                $row = array_pad($row, count($header), '');
-                                $d = array_combine($header, array_slice($row, 0, count($header)));
-                                if (!$d) {$rowErrors[] = "Ligne $line : structure invalide."; continue;}
-                                $cid = (int)($d['category_id'] ?? 0);
-                                $exists = $db->prepare('SELECT 1 FROM categories WHERE id=:id AND active=1');
-                                $exists->execute(['id'=>$cid]);
-                                if (!$exists->fetchColumn()) {$rowErrors[] = "Ligne $line : catégorie $cid inexistante."; continue;}
-                                $type = (string)($d['type'] ?? 'qcm');
-                                $difficulty = (int)($d['difficulty'] ?? 0);
-                                $question = trim((string)($d['question'] ?? ''));
-                                if ($question === '' || !in_array($type,['qcm','true_false','multiple','short'],true) || $difficulty < 1 || $difficulty > 5) {
-                                    $rowErrors[] = "Ligne $line : question/type/difficulté invalide.";
-                                    continue;
-                                }
-                                $answers = [];
-                                for ($i=1; $i<=6; $i++) {
-                                    $txt = trim((string)($d['answer_'.$i] ?? ''));
-                                    if ($txt !== '') $answers[] = ['answer'=>$txt,'is_correct'=>(int)($d['correct_'.$i] ?? 0) === 1 ? 1 : 0];
-                                }
-                                $correct = array_sum(array_column($answers,'is_correct'));
-                                $bad = ($type==='qcm' && (count($answers)<2 || $correct!==1))
-                                    || ($type==='multiple' && (count($answers)<2 || $correct<1))
-                                    || ($type==='true_false' && (count($answers)!==2 || $correct!==1))
-                                    || ($type==='short' && (count($answers)<1 || $correct<1));
-                                if ($bad) {$rowErrors[] = "Ligne $line : réponses incohérentes pour le type $type."; continue;}
-                                $du = $db->prepare('SELECT id FROM questions WHERE lower(trim(question))=lower(trim(:q)) LIMIT 1');
-                                $du->execute(['q'=>$question]);
-                                if ($du->fetchColumn()) {$rowErrors[] = "Ligne $line : question déjà existante."; continue;}
-                                $valid[] = [
-                                    'category_id'=>$cid,'question'=>$question,'type'=>$type,'difficulty'=>$difficulty,
-                                    'lesson'=>$d['lesson']??'','topic'=>$d['topic']??'','explanation'=>$d['explanation']??'',
-                                    'exclusion_group'=>$d['exclusion_group']??'','active'=>((string)($d['active']??'1') !== '0') ? 1 : 0,
-                                    'answers'=>$answers,
-                                ];
-                            }
-                        }
-                        fclose($h);
-                        $preview = ['valid'=>$valid,'errors'=>$rowErrors];
+                    try {
+                        $preview = $importer->analyze(
+                            (string)$file['tmp_name'],
+                            (int)($file['size'] ?? 0)
+                        );
                         $_SESSION['question_import_preview'] = $preview;
+                    } catch (Throwable $e) {
+                        $errors[] = $this->safeError($e, 'import_analyze');
                     }
                 }
             }
@@ -402,21 +308,37 @@ final class QuestionController
     public function export(): void
     {
         Auth::requireAdmin(Url::to('login'));
-        $db = Database::connection();
+        $model = new Question(Database::connection());
         header('Content-Type:text/csv; charset=UTF-8');
         header('Content-Disposition:attachment; filename="tech4u-questions.csv"');
         $out = fopen('php://output','wb');
         fwrite($out,"\xEF\xBB\xBF");
         $header = ['id','module_id','category_id','question','type','difficulty','lesson','topic','explanation','exclusion_group','active'];
-        for ($i=1; $i<=6; $i++) {$header[]='answer_'.$i; $header[]='correct_'.$i;}
+        for ($i=1; $i<=6; $i++) {
+            $header[]='answer_'.$i;
+            $header[]='correct_'.$i;
+        }
         fputcsv($out,$header,';','"','\\');
-        $qs = $db->query('SELECT q.*,c.module_id FROM questions q JOIN categories c ON c.id=q.category_id ORDER BY q.id');
-        $ans = $db->prepare('SELECT answer,is_correct FROM question_answers WHERE question_id=:id ORDER BY display_order,id');
-        while ($question = $qs->fetch(PDO::FETCH_ASSOC)) {
-            $row = [$question['id'],$question['module_id'],$question['category_id'],$question['question'],$question['type'],$question['difficulty'],$question['lesson'],$question['topic'],$question['explanation'],$question['exclusion_group'],$question['active']];
-            $ans->execute(['id'=>$question['id']]);
-            $answers = $ans->fetchAll(PDO::FETCH_ASSOC);
-            for ($i=0; $i<6; $i++) {$row[]=$answers[$i]['answer']??''; $row[]=$answers[$i]['is_correct']??'';}
+
+        foreach ($model->exportRows() as $question) {
+            $row = [
+                $question['id'],
+                $question['module_id'],
+                $question['category_id'],
+                $question['question'],
+                $question['type'],
+                $question['difficulty'],
+                $question['lesson'],
+                $question['topic'],
+                $question['explanation'],
+                $question['exclusion_group'],
+                $question['active'],
+            ];
+            $answers = $question['answers'] ?? [];
+            for ($i=0; $i<6; $i++) {
+                $row[] = $answers[$i]['answer'] ?? '';
+                $row[] = $answers[$i]['is_correct'] ?? '';
+            }
             fputcsv($out,$row,';','"','\\');
         }
         fclose($out);
@@ -425,21 +347,24 @@ final class QuestionController
     public function reference(): void
     {
         Auth::requireAdmin(Url::to('login'));
-        $db = Database::connection();
+        $model = new Question(Database::connection());
         header('Content-Type:text/csv; charset=UTF-8');
         header('Content-Disposition:attachment; filename="modules_categories.csv"');
         $out = fopen('php://output','wb');
         fwrite($out,"\xEF\xBB\xBF");
         fputcsv($out,['module_id','module','category_id','category','recommended_bank_size'],';','"','\\');
-        $rows = $db->query('SELECT m.id module_id,m.title module,c.id category_id,c.name category,c.recommended_bank_size FROM modules m JOIN categories c ON c.module_id=m.id ORDER BY m.display_order,m.id,c.display_order,c.id');
-        while ($row = $rows->fetch(PDO::FETCH_ASSOC)) fputcsv($out,$row,';','"','\\');
+        foreach ($model->referenceRows() as $row) {
+            fputcsv($out,$row,';','"','\\');
+        }
         fclose($out);
     }
 
     private function safeError(Throwable $e, string $action): string
     {
-        if ($e instanceof RuntimeException) return $e->getMessage();
-        Logger::exception($e, ['controller'=>'Admin\\QuestionController','action'=>$action]);
+        if ($e instanceof RuntimeException) {
+            return $e->getMessage();
+        }
+        Logger::exception($e, ['controller'=>self::class,'action'=>$action]);
         return 'Une erreur technique est survenue. Consulte le journal de l’application.';
     }
 }
