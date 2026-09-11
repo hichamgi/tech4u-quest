@@ -13,7 +13,7 @@
     }
   },
   "scripts": {
-    "check": "php tests/health_check.php"
+    "check": "php tests/router_check.php && php tests/health_check.php"
   },
   "config": {
     "optimize-autoloader": true,
