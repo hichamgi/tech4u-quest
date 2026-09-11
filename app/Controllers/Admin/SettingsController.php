@@ -8,7 +8,7 @@ use App\Core\Database;
 use App\Core\Logger;
 use App\Core\Url;
 use App\Core\View;
-use PDO;
+use App\Models\Setting;
 use Throwable;
 
 final class SettingsController
@@ -16,7 +16,7 @@ final class SettingsController
     public function index(): void
     {
         Auth::requireAdmin(Url::to('login'));
-        $db = Database::connection();
+        $settingsModel = new Setting(Database::connection());
         $message = $error = null;
 
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
@@ -32,19 +32,12 @@ final class SettingsController
                     $error = 'L’année scolaire doit être au format 2026-2027.';
                 } else {
                     try {
-                        $db->beginTransaction();
-                        $stmt = $db->prepare(
-                            'INSERT INTO settings(key,value) VALUES(:key,:value)
-                             ON CONFLICT(key) DO UPDATE SET value=excluded.value'
-                        );
-                        $stmt->execute(['key'=>'site_name','value'=>$siteName]);
-                        $stmt->execute(['key'=>'school_year','value'=>$schoolYear]);
-                        $db->commit();
+                        $settingsModel->saveMany([
+                            'site_name' => $siteName,
+                            'school_year' => $schoolYear,
+                        ]);
                         $message = 'Paramètres enregistrés.';
                     } catch (Throwable $e) {
-                        if ($db->inTransaction()) {
-                            $db->rollBack();
-                        }
                         Logger::exception($e, ['action' => 'save_settings']);
                         $error = 'Impossible d’enregistrer les paramètres pour le moment.';
                     }
@@ -53,7 +46,7 @@ final class SettingsController
         }
 
         try {
-            $settings = $db->query('SELECT key,value FROM settings')->fetchAll(PDO::FETCH_KEY_PAIR);
+            $settings = $settingsModel->all();
         } catch (Throwable $e) {
             Logger::exception($e, ['action' => 'load_settings']);
             $settings = [];
