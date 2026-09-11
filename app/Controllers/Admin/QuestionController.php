@@ -10,14 +10,12 @@ use App\Core\Url;
 use App\Core\View;
 use App\Models\Question;
 use App\Services\QuestionBankService;
-use App\Services\QuestionImportService;
 use RuntimeException;
 use Throwable;
 
 final class QuestionController
 {
     private const QUESTIONS_PER_PAGE = 50;
-    private const EXCLUSIONS_PER_PAGE = 50;
 
     public function index(): void
     {
@@ -183,180 +181,6 @@ final class QuestionController
         }
 
         View::render('admin/questions/edit', compact('id','question','answers','categories','error'));
-    }
-
-    public function exclusions(): void
-    {
-        Auth::requireAdmin(Url::to('login'));
-        $model = new Question(Database::connection());
-        $message = $error = null;
-
-        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-            if (!Auth::validateCsrf($_POST['csrf_token'] ?? null)) {
-                $error = 'Jeton de sécurité invalide.';
-            } else {
-                try {
-                    $groups = $_POST['group'] ?? [];
-                    if (!is_array($groups)) {
-                        throw new RuntimeException('Données invalides.');
-                    }
-                    $updated = $model->updateExclusionGroups($groups);
-                    $message = $updated . ' question(s) mise(s) à jour sur cette page.';
-                } catch (Throwable $e) {
-                    $error = $this->safeError($e, 'exclusions');
-                }
-            }
-        }
-
-        $module = max(0, (int)($_GET['module'] ?? 0));
-        $category = max(0, (int)($_GET['category'] ?? 0));
-        $search = trim((string)($_GET['q'] ?? ''));
-        $page = max(1, (int)($_GET['page'] ?? 1));
-
-        try {
-            $result = $model->paginateExclusions([
-                'module' => $module,
-                'category' => $category,
-                'search' => $search,
-            ], $page, self::EXCLUSIONS_PER_PAGE);
-            $questions = $result['questions'];
-            $page = $result['page'];
-            $totalPages = $result['totalPages'];
-            $totalRows = $result['totalRows'];
-            $modules = $model->modules();
-            $categories = $model->categories(true);
-        } catch (Throwable $e) {
-            Logger::exception($e, ['controller' => self::class, 'action' => 'exclusions_load']);
-            $questions = [];
-            $modules = [];
-            $categories = [];
-            $page = 1;
-            $totalPages = 1;
-            $totalRows = 0;
-            $error ??= 'Impossible de charger les groupes d’exclusion pour le moment.';
-        }
-
-        View::render('admin/questions/exclusions', compact(
-            'message','error','module','category','search','questions','modules','categories',
-            'page','totalPages','totalRows'
-        ));
-    }
-
-    public function import(): void
-    {
-        Auth::requireAdmin(Url::to('login'));
-        Auth::boot();
-        $db = Database::connection();
-        $model = new Question($db);
-        $bank = new QuestionBankService($db);
-        $importer = new QuestionImportService($db, $model, $bank);
-        $errors = [];
-        $preview = $_SESSION['question_import_preview'] ?? null;
-        $message = null;
-
-        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-            if (!Auth::validateCsrf($_POST['csrf_token'] ?? null)) {
-                $errors[] = 'Jeton de sécurité invalide.';
-            } elseif (($_POST['action'] ?? '') === 'commit' && is_array($preview)) {
-                $validRows = is_array($preview['valid'] ?? null) ? $preview['valid'] : [];
-                try {
-                    $imported = $importer->commit($validRows);
-                    unset($_SESSION['question_import_preview']);
-                    $preview = null;
-                    $message = $imported . ' question(s) importée(s). Import atomique terminé avec succès.';
-                } catch (Throwable $e) {
-                    if ($e instanceof RuntimeException) {
-                        $errors[] = $e->getMessage() . ' Import annulé : aucune question du lot n’a été enregistrée.';
-                    } else {
-                        Logger::exception($e, [
-                            'controller'=>self::class,
-                            'action'=>'import_commit_atomic',
-                        ]);
-                        $errors[] = 'Erreur technique pendant l’import. Import annulé : aucune question du lot n’a été enregistrée.';
-                    }
-                }
-            } else {
-                $file = $_FILES['csv'] ?? null;
-                if (!is_array($file) || (int)($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-                    $errors[] = 'Fichier CSV invalide.';
-                } else {
-                    try {
-                        $preview = $importer->analyze(
-                            (string)$file['tmp_name'],
-                            (int)($file['size'] ?? 0)
-                        );
-                        $_SESSION['question_import_preview'] = $preview;
-                    } catch (Throwable $e) {
-                        $errors[] = $this->safeError($e, 'import_analyze');
-                    }
-                }
-            }
-        }
-
-        View::render('admin/questions/import', compact('errors','preview','message'));
-    }
-
-    public function template(): void
-    {
-        Auth::requireAdmin(Url::to('login'));
-        header('Content-Type:text/csv; charset=UTF-8');
-        header('Content-Disposition:attachment; filename="questions-template.csv"');
-        echo "\xEF\xBB\xBF";
-        echo "category_id;question;type;difficulty;lesson;topic;explanation;exclusion_group;answer_1;correct_1;answer_2;correct_2;answer_3;correct_3;answer_4;correct_4;answer_5;correct_5;answer_6;correct_6;active\n";
-    }
-
-    public function export(): void
-    {
-        Auth::requireAdmin(Url::to('login'));
-        $model = new Question(Database::connection());
-        header('Content-Type:text/csv; charset=UTF-8');
-        header('Content-Disposition:attachment; filename="tech4u-questions.csv"');
-        $out = fopen('php://output','wb');
-        fwrite($out,"\xEF\xBB\xBF");
-        $header = ['id','module_id','category_id','question','type','difficulty','lesson','topic','explanation','exclusion_group','active'];
-        for ($i=1; $i<=6; $i++) {
-            $header[]='answer_'.$i;
-            $header[]='correct_'.$i;
-        }
-        fputcsv($out,$header,';','"','\\');
-
-        foreach ($model->exportRows() as $question) {
-            $row = [
-                $question['id'],
-                $question['module_id'],
-                $question['category_id'],
-                $question['question'],
-                $question['type'],
-                $question['difficulty'],
-                $question['lesson'],
-                $question['topic'],
-                $question['explanation'],
-                $question['exclusion_group'],
-                $question['active'],
-            ];
-            $answers = $question['answers'] ?? [];
-            for ($i=0; $i<6; $i++) {
-                $row[] = $answers[$i]['answer'] ?? '';
-                $row[] = $answers[$i]['is_correct'] ?? '';
-            }
-            fputcsv($out,$row,';','"','\\');
-        }
-        fclose($out);
-    }
-
-    public function reference(): void
-    {
-        Auth::requireAdmin(Url::to('login'));
-        $model = new Question(Database::connection());
-        header('Content-Type:text/csv; charset=UTF-8');
-        header('Content-Disposition:attachment; filename="modules_categories.csv"');
-        $out = fopen('php://output','wb');
-        fwrite($out,"\xEF\xBB\xBF");
-        fputcsv($out,['module_id','module','category_id','category','recommended_bank_size'],';','"','\\');
-        foreach ($model->referenceRows() as $row) {
-            fputcsv($out,$row,';','"','\\');
-        }
-        fclose($out);
     }
 
     private function safeError(Throwable $e, string $action): string
