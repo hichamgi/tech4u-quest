@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Auth;
-use App\Core\Database;
 use App\Core\Logger;
 use App\Core\Url;
 use App\Core\View;
@@ -16,18 +15,21 @@ use Throwable;
 
 final class StudentController
 {
+    public function __construct(
+        private Student $studentModel,
+        private GameService $game
+    ) {
+    }
+
     public function dashboard(): void
     {
         $student = Auth::requireStudent(Url::to('login'));
 
         try {
-            $db = Database::connection();
-            $studentModel = new Student($db);
-            $game = new GameService($db);
-            $isDemo = $studentModel->isDemo((int)$student['id']);
-            $modules = $game->modulesForStudent((int)$student['id'], $isDemo);
-            $badgeCount = $studentModel->badgeCount((int)$student['id']);
-            $badges = $studentModel->badges((int)$student['id']);
+            $isDemo = $this->studentModel->isDemo((int)$student['id']);
+            $modules = $this->game->modulesForStudent((int)$student['id'], $isDemo);
+            $badgeCount = $this->studentModel->badgeCount((int)$student['id']);
+            $badges = $this->studentModel->badges((int)$student['id']);
         } catch (Throwable $e) {
             Logger::exception($e, ['area' => 'student_dashboard', 'student_id' => (int)$student['id']]);
             http_response_code(503);
@@ -59,12 +61,9 @@ final class StudentController
         $error = null;
 
         try {
-            $db = Database::connection();
-            $studentModel = new Student($db);
-            $game = new GameService($db);
-            $isDemo = $studentModel->isDemo((int)$student['id']);
-            $module = $game->module($moduleId, $isDemo);
-            $paths = $game->pathsForStudent($moduleId, (int)$student['id'], $isDemo);
+            $isDemo = $this->studentModel->isDemo((int)$student['id']);
+            $module = $this->game->module($moduleId, $isDemo);
+            $paths = $this->game->pathsForStudent($moduleId, (int)$student['id'], $isDemo);
         } catch (RuntimeException $e) {
             if ($e instanceof PDOException) {
                 Logger::exception($e, ['area' => 'student_module', 'module_id' => $moduleId]);
@@ -105,17 +104,14 @@ final class StudentController
         }
 
         try {
-            $db = Database::connection();
-            $studentModel = new Student($db);
-            $game = new GameService($db);
-            $isDemo = $studentModel->isDemo((int)$student['id']);
+            $isDemo = $this->studentModel->isDemo((int)$student['id']);
 
             if ($pathId < 1) {
                 throw new RuntimeException('Choisis un parcours avant de commencer.');
             }
 
-            $game->module($moduleId, $isDemo);
-            $attemptId = $game->startOrResume((int)$student['id'], $moduleId, $pathId, $isDemo, $isDemo);
+            $this->game->module($moduleId, $isDemo);
+            $attemptId = $this->game->startOrResume((int)$student['id'], $moduleId, $pathId, $isDemo, $isDemo);
             header('Location: ' . Url::to('question/' . $attemptId));
             exit;
         } catch (RuntimeException $e) {
@@ -134,12 +130,9 @@ final class StudentController
         $module = null;
         $paths = [];
         try {
-            $db ??= Database::connection();
-            $studentModel ??= new Student($db);
-            $game ??= new GameService($db);
-            $isDemo ??= $studentModel->isDemo((int)$student['id']);
-            $module = $game->module($moduleId, $isDemo);
-            $paths = $game->pathsForStudent($moduleId, (int)$student['id'], $isDemo);
+            $isDemo ??= $this->studentModel->isDemo((int)$student['id']);
+            $module = $this->game->module($moduleId, $isDemo);
+            $paths = $this->game->pathsForStudent($moduleId, (int)$student['id'], $isDemo);
         } catch (Throwable $reloadError) {
             Logger::exception($reloadError, ['area' => 'student_start_module_reload', 'module_id' => $moduleId]);
         }
