@@ -5,9 +5,12 @@ namespace App\Controllers\Admin;
 
 use App\Core\Auth;
 use App\Core\Database;
+use App\Core\Logger;
 use App\Core\Url;
 use App\Core\View;
-use PDO;
+use App\Models\AdminDashboard;
+use App\Models\Setting;
+use Throwable;
 
 final class DashboardController
 {
@@ -15,43 +18,36 @@ final class DashboardController
     {
         $admin = Auth::requireAdmin(Url::to('login'));
         $db = Database::connection();
+        $dashboard = new AdminDashboard($db);
+        $settingsModel = new Setting($db);
+        $error = null;
 
-        $scalar = static fn(string $sql): int => (int)$db->query($sql)->fetchColumn();
-        $stats = [
-            'students' => $scalar('SELECT COUNT(*) FROM students WHERE active = 1'),
-            'classes' => $scalar('SELECT COUNT(DISTINCT class_code) FROM students WHERE active = 1'),
-            'modules' => $scalar('SELECT COUNT(*) FROM modules WHERE active = 1'),
-            'categories' => $scalar('SELECT COUNT(*) FROM categories WHERE active = 1'),
-            'questions' => $scalar('SELECT COUNT(*) FROM questions WHERE active = 1'),
-            'attempts' => $scalar('SELECT COUNT(*) FROM attempts'),
-            'badges' => $scalar('SELECT COUNT(*) FROM path_badges'),
-            'awarded_badges' => $scalar('SELECT COUNT(*) FROM student_path_badges'),
-        ];
-
-        $settings = $db->query('SELECT key,value FROM settings')->fetchAll(PDO::FETCH_KEY_PAIR);
-        $schoolYear = (string)($settings['school_year'] ?? 'Non définie');
-
-        $moduleStatus = $db->query(
-            'SELECT m.id,m.icon,m.title,m.recommended_bank_size,ms.question_count,ms.initial_lives,
-                    COUNT(DISTINCT c.id) categories,
-                    COUNT(DISTINCT CASE WHEN q.active=1 THEN q.id END) active_questions
-             FROM modules m
-             LEFT JOIN module_settings ms ON ms.module_id=m.id
-             LEFT JOIN categories c ON c.module_id=m.id AND c.active=1
-             LEFT JOIN questions q ON q.category_id=c.id
-             WHERE m.active=1
-             GROUP BY m.id
-             ORDER BY m.display_order,m.id'
-        )->fetchAll(PDO::FETCH_ASSOC);
-
-        $quota = $db->prepare('SELECT COALESCE(SUM(question_count),0) FROM module_category_settings WHERE module_id=:id');
-        foreach ($moduleStatus as &$module) {
-            $quota->execute(['id'=>$module['id']]);
-            $module['configured_quota'] = (int)$quota->fetchColumn();
+        try {
+            $stats = $dashboard->stats();
+            $settings = $settingsModel->all();
+            $schoolYear = (string)($settings['school_year'] ?? 'Non définie');
+            $moduleStatus = $dashboard->moduleStatus();
+            $expectedBadgeCount = $dashboard->expectedBadgeCount();
+            $recent = $dashboard->recentAttempts(10);
+        } catch (Throwable $e) {
+            Logger::exception($e, ['controller' => self::class, 'action' => 'index']);
+            $stats = [
+                'students' => 0,
+                'classes' => 0,
+                'modules' => 0,
+                'categories' => 0,
+                'questions' => 0,
+                'attempts' => 0,
+                'badges' => 0,
+                'awarded_badges' => 0,
+            ];
+            $schoolYear = 'Non définie';
+            $moduleStatus = [];
+            $expectedBadgeCount = 0;
+            $recent = [];
+            $error = 'Impossible de charger toutes les données du tableau de bord pour le moment.';
         }
-        unset($module);
 
-        $expectedBadgeCount = $scalar('SELECT COUNT(*) FROM module_paths');
         $configItems = [
             ['title'=>'Année scolaire','ok'=>$schoolYear !== '' && $schoolYear !== 'Non définie','detail'=>$schoolYear,'url'=>Url::to('admin/settings')],
             ['title'=>'Liste des élèves','ok'=>$stats['students'] > 0,'detail'=>$stats['students'].' élève(s) actif(s) dans '.$stats['classes'].' classe(s)','url'=>Url::to('admin/students')],
@@ -61,14 +57,14 @@ final class DashboardController
             ['title'=>'Badges de parcours','ok'=>$expectedBadgeCount > 0 && $stats['badges'] === $expectedBadgeCount,'detail'=>$stats['badges'].' / '.$expectedBadgeCount.' badge(s) configuré(s)','url'=>Url::to('admin/modules')],
         ];
 
-        $recent = $db->query(
-            'SELECT a.id,s.login_code,m.title module_title,a.score,a.total_questions,a.status,a.started_at
-             FROM attempts a
-             JOIN students s ON s.id=a.student_id
-             JOIN modules m ON m.id=a.module_id
-             ORDER BY a.id DESC LIMIT 10'
-        )->fetchAll(PDO::FETCH_ASSOC);
-
-        View::render('admin/dashboard', compact('admin','stats','schoolYear','moduleStatus','configItems','recent'));
+        View::render('admin/dashboard', compact(
+            'admin',
+            'stats',
+            'schoolYear',
+            'moduleStatus',
+            'configItems',
+            'recent',
+            'error'
+        ));
     }
 }
