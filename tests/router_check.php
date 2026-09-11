@@ -5,6 +5,12 @@ use App\Core\Router;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
+// En CLI, http_response_code() ne peut plus modifier le statut dès qu'une sortie
+// a été effectivement envoyée. On garde donc toute la sortie du test en mémoire
+// jusqu'à la fin ; les buffers locaux de $dispatch continuent à capturer chaque
+// réponse du routeur séparément.
+ob_start();
+
 $failures = [];
 
 $check = static function (bool $condition, string $label, ?string $detail = null) use (&$failures): void {
@@ -49,8 +55,10 @@ $check($status === 200 && $output === 'module:abc 123', 'Décodage du paramètre
 echo "\n";
 if ($failures !== []) {
     echo count($failures) . " contrôle(s) routeur en échec.\n";
+    ob_end_flush();
     exit(1);
 }
 
 echo "Tous les contrôles du routeur sont OK.\n";
+ob_end_flush();
 exit(0);
