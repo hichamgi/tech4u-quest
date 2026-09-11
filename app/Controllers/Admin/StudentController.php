@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace App\Controllers\Admin;
 
 use App\Core\Auth;
-use App\Core\Database;
 use App\Core\Logger;
 use App\Core\Url;
 use App\Core\View;
@@ -15,11 +14,15 @@ use Throwable;
 
 final class StudentController
 {
+    public function __construct(
+        private Student $studentModel,
+        private StudentCsvImportService $importService
+    ) {
+    }
+
     public function index(): void
     {
         Auth::requireAdmin(Url::to('login'));
-        $db = Database::connection();
-        $studentModel = new Student($db);
         $message = $error = null;
         $importResult = null;
 
@@ -28,7 +31,7 @@ final class StudentController
                 $error = 'Jeton de sécurité invalide. Recharge la page et recommence.';
             } elseif (($_POST['action'] ?? '') === 'reset_demo') {
                 try {
-                    $studentModel->resetDemoProgress(2);
+                    $this->studentModel->resetDemoProgress(2);
                     $message = 'Compte DEMO-1 réinitialisé : progression, tentatives, réponses, scores et badges effacés. Le compte et son mot de passe sont inchangés.';
                 } catch (Throwable $e) {
                     if ($e instanceof RuntimeException) {
@@ -44,8 +47,10 @@ final class StudentController
                 $error = 'Erreur pendant l’envoi du fichier CSV.';
             } else {
                 try {
-                    $service = new StudentCsvImportService($db);
-                    $importResult = $service->import((string)$_FILES['csv']['tmp_name'], (int)$_FILES['csv']['size']);
+                    $importResult = $this->importService->import(
+                        (string)$_FILES['csv']['tmp_name'],
+                        (int)$_FILES['csv']['size']
+                    );
 
                     if (!empty($importResult['errors'])) {
                         $error = 'Import annulé : aucune modification n’a été enregistrée. Corrige les lignes signalées puis réimporte le fichier.';
@@ -71,10 +76,10 @@ final class StudentController
         $filterClass = strtoupper(trim((string)($_GET['class'] ?? '')));
 
         try {
-            $students = $studentModel->adminList($filterClass);
-            $classes = $studentModel->classSummaries();
-            $totals = $studentModel->adminTotals();
-            $demoStudent = $studentModel->demoSummary(2);
+            $students = $this->studentModel->adminList($filterClass);
+            $classes = $this->studentModel->classSummaries();
+            $totals = $this->studentModel->adminTotals();
+            $demoStudent = $this->studentModel->demoSummary(2);
         } catch (Throwable $e) {
             Logger::exception($e, ['controller'=>self::class,'action'=>'load']);
             $students = [];
